@@ -1,5 +1,5 @@
 project "Sandbox"
-   kind "ConsoleApp"
+   kind "WindowedApp"
    language "C++"
    cppdialect "C++20"
    targetdir "Bin/%{cfg.buildcfg}"
@@ -13,8 +13,8 @@ project "Sandbox"
       "src",
 
 	  -- Include Core
-      "../Wave",
-	  "../Wave/Core"
+      "../Bada",
+	  "../Bada/Core"
    }
 
    links

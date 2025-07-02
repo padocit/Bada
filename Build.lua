@@ -1,5 +1,5 @@
 -- premake5.lua
-workspace "Wave"
+workspace "Bada"
    architecture "x64"
    configurations { "Debug", "Release", "Dist" }
    startproject "Sandbox"
@@ -10,8 +10,8 @@ workspace "Wave"
 
 OutputDir = "%{cfg.system}-%{cfg.architecture}/%{cfg.buildcfg}"
 
-group "Wave"
-	include "Wave/Build-Core.lua"
+group "Bada"
+	include "Bada/Build-Core.lua"
 group ""
 
 include "Sandbox/Build-Sandbox.lua"
