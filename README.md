@@ -1,5 +1,5 @@
-# Wave
-Wave Renderer
+# Bada
+Bada Renderer
 
 ## The plan
 
