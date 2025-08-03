@@ -1,0 +1,16 @@
+# Directories
+.vs/
+bin/
+Assets/
+
+# Files
+*.user
+*.sln
+*.vcxproj*
+*.filters
+
+# NuGet caches
+packages/
+*.nupkg
+# global cache
+%USERPROFILE%\.nuget\packages/
