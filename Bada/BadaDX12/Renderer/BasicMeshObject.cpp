@@ -147,15 +147,27 @@ BOOL CBasicMeshObject::InitPipelineState()
 #else
 	UINT compileFlags = 0;
 #endif
-	// Use 'ID3DBlob* errorBlob' for debugging (If errorBlob is empty after compiliing, the path is wrong.)
-	if (FAILED(D3DCompileFromFile(L"./Shaders/shBasicMesh.hlsl", nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &pVertexShader, nullptr)))
+	m_pRenderer->SetCurrentPathForShader();
+	ID3DBlob* pErrorBlob = nullptr;
+	if (FAILED(D3DCompileFromFile(L"shBasicMesh.hlsl", nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &pVertexShader, &pErrorBlob)))
 	{
+		if (pErrorBlob != nullptr)
+		{
+			OutputDebugStringA((char*)pErrorBlob->GetBufferPointer());
+			pErrorBlob->Release();
+		}
 		__debugbreak();
 	}
-	if (FAILED(D3DCompileFromFile(L"./Shaders/shBasicMesh.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pPixelShader, nullptr)))
+	if (FAILED(D3DCompileFromFile(L"shBasicMesh.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pPixelShader, &pErrorBlob)))
 	{
+		if (pErrorBlob != nullptr)
+		{
+			OutputDebugStringA((char*)pErrorBlob->GetBufferPointer());
+			pErrorBlob->Release();
+		}
 		__debugbreak();
 	}
+	m_pRenderer->RestoreCurrentPath();
 
 	// Define the vertex input layout.
 	D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =

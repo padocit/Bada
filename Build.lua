@@ -2,7 +2,7 @@
 workspace "Bada"
    platforms { "x64", "x86" }
    configurations { "Debug", "Release", "Dist" }
-   startproject "Engine"
+   startproject "App"
 
    filter "platforms:x64"
       architecture "x86_64"
@@ -19,7 +19,7 @@ workspace "Bada"
 OutputDir = "%{cfg.system}-%{cfg.architecture}/%{cfg.buildcfg}"
 
 group "Bada"
-	include "Bada/Build-Engine.lua"
+	include "Bada/Build-BadaDX12.lua"
 group ""
 
 include "App/Build-App.lua"

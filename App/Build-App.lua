@@ -6,20 +6,23 @@ project "App"
    staticruntime "off"
    location "App"
 
-   files { "src/**.h", "src/**.cpp" }
+   files { "App/**.h", "App/**.cpp", 
+   "Resource/**.rc", "Resource/**.h", "../Common/**"}
 
    includedirs
    {
-      "src",
-
-	  -- Include Core
-      "../Parang",
-	  "../Parang/Engine"
+    "App",
+    "App/Utils",
+    "Resource",
+    "../Common",
+    "../Common/Utils"
    }
 
+    -- BadaDX12.lib 가 있는 경로
+   libdirs {"../Bin/" .. OutputDir .. "/%{prj.name}"}
    links
    {
-      "Engine"
+      "BadaDX12"
    }
 
    targetdir ("../Bin/" .. OutputDir .. "/%{prj.name}")

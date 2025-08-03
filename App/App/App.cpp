@@ -1,40 +1,10 @@
+// App.cpp : Defines the entry point for the application.
+//
+
 #include "Pch.h"
 #include "Resource.h"
-#include "VertexUtil.h"
-#include "Game/Game.h"
-
-#include <DirectXMath.h>
-
-using namespace DirectX;
-
-// required .lib files
-#pragma comment(lib, "DXGI.lib")
-#pragma comment(lib, "dxguid.lib")
-#pragma comment(lib, "D3D12.lib")
-#pragma comment(lib, "D3D11.lib")
-#pragma comment(lib, "D3DCompiler.lib")
-#pragma comment(lib, "d2d1.lib")
-#pragma comment(lib, "dwrite.lib")
-
-#if defined(_M_ARM64EC) || defined(_M_ARM64)
-	#ifdef _DEBUG
-	#pragma comment(lib, "../../Vendor/DirectXTex/DirectXTex/Bin/Desktop_2022/ARM64/debug/DirectXTex.lib")
-	#else
-	#pragma comment(lib, "../../Vendor/DirectXTex/DirectXTex/Bin/Desktop_2022/ARM64/release/DirectXTex.lib")
-	#endif
-#elif defined(_M_AMD64)
-	#ifdef _DEBUG
-	#pragma comment(lib, "../../Vendor/DirectXTex/DirectXTex/Bin/Desktop_2022/x64/debug/DirectXTex.lib")
-	#else
-	#pragma comment(lib, "../../Vendor/DirectXTex/DirectXTex/Bin/Desktop_2022/x64/release/DirectXTex.lib")
-	#endif
-#elif defined(_M_IX86)
-	#ifdef _DEBUG
-	#pragma comment(lib, "../../Vendor/DirectXTex/DirectXTex/Bin/Desktop_2022/win32/debug/DirectXTex.lib")
-	#else
-	#pragma comment(lib, "../../Vendor/DirectXTex/DirectXTex/Bin/Desktop_2022/win32/release/DirectXTex.lib")
-	#endif
-#endif
+#include "Game.h"
+#include "App.h"
 
 
 extern "C" { __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001; }
@@ -44,38 +14,38 @@ extern "C" { __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001; }
 extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 616; }
 
 #if defined(_M_ARM64EC)
-	extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8"..\\..\\..\\..\\Vendor\\D3D12\\x64\\"; }
+extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8"..\\..\\..\\..\\Vendor\\D3D12\\x64\\"; }
 #elif defined(_M_ARM64)
-	extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8"..\\..\\..\\..\\Vendor\\D3D12\\x64\\"; }
+extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8"..\\..\\..\\..\\Vendor\\D3D12\\x64\\"; }
 #elif defined(_M_AMD64)
-	extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8"..\\..\\..\\..\\Vendor\\D3D12\\x64\\"; }
+extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8"..\\..\\..\\..\\Vendor\\D3D12\\x64\\"; }
 #elif defined(_M_IX86)
-	extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8"..\\..\\..\\..\\Vendor\\D3D12\\x86\\"; }
+extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8"..\\..\\..\\..\\Vendor\\D3D12\\x86\\"; }
 #endif
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#pragma comment(lib, "Shlwapi.lib")
+
 
 #define MAX_LOADSTRING 100
 
 // Global Variables:
-HINSTANCE hInst = nullptr;                                // current instance
+CGame* g_pGame = nullptr;
+HINSTANCE hInst;                                // current instance
 HWND g_hMainWindow = nullptr;
 WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 
-CGame* g_pGame = nullptr;
-
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
-HWND InitInstance(HINSTANCE hInstance, int nCmdShow);
+BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 
-
-// Entry point
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
-	_In_opt_ HINSTANCE hPrevInstance,
-	_In_ LPWSTR    lpCmdLine,
-	_In_ int       nCmdShow)
+					  _In_opt_ HINSTANCE hPrevInstance,
+					  _In_ LPWSTR    lpCmdLine,
+					  _In_ int       nCmdShow)
 {
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
@@ -84,20 +54,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 #ifdef _DEBUG
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
-
 	// Initialize global strings
 	LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-	LoadStringW(hInstance, IDC_CORE, szWindowClass, MAX_LOADSTRING);
+	LoadStringW(hInstance, IDC_APP, szWindowClass, MAX_LOADSTRING);
 	MyRegisterClass(hInstance);
 
 	// Perform application initialization:
-	g_hMainWindow = InitInstance(hInstance, nCmdShow);
-	if (!g_hMainWindow)
+	if (!InitInstance (hInstance, nCmdShow))
 	{
 		return FALSE;
 	}
 
-	HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_CORE));
+	HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_APP));
 
 	MSG msg;
 
@@ -105,8 +73,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	//g_pGame->Initialize(g_hMainWindow, TRUE, TRUE);
 	g_pGame->Initialize(g_hMainWindow, FALSE, FALSE);
 
-	SetWindowText(g_hMainWindow, L"Parang");
-
+	SetWindowText(g_hMainWindow, L"Bada Renderer");
 	// Main message loop:
 	while (1)
 	{
@@ -124,6 +91,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 
+
 		}
 		else
 		{
@@ -139,10 +107,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		g_pGame = nullptr;
 	}
 #ifdef _DEBUG
-	_ASSERT(_CrtCheckMemory()); // line 57: _CrtSetDbgFlag (Check CRT Heap corruption or leak)
+	_ASSERT(_CrtCheckMemory());
 #endif
 	return (int)msg.wParam;
 }
+
 
 
 //
@@ -161,10 +130,10 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	wcex.cbClsExtra = 0;
 	wcex.cbWndExtra = 0;
 	wcex.hInstance = hInstance;
-	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_CORE));
+	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP));
 	wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
 	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-	wcex.lpszMenuName = MAKEINTRESOURCEW(IDC_CORE);
+	wcex.lpszMenuName = MAKEINTRESOURCEW(IDC_APP);
 	wcex.lpszClassName = szWindowClass;
 	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
@@ -181,22 +150,22 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 //        In this function, we save the instance handle in a global variable and
 //        create and display the main program window.
 //
-HWND InitInstance(HINSTANCE hInstance, int nCmdShow)
+BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
 	hInst = hInstance; // Store instance handle in our global variable
 
 	HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-		CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
+							  CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
 
 	if (!hWnd)
 	{
-		return nullptr;
+		return FALSE;
 	}
-
+	g_hMainWindow = hWnd;
 	ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);
 
-	return hWnd;
+	return TRUE;
 }
 
 //
@@ -219,14 +188,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				// Parse the menu selections:
 				switch (wmId)
 				{
-				case IDM_ABOUT:
-					DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-					break;
-				case IDM_EXIT:
-					DestroyWindow(hWnd);
-					break;
-				default:
-					return DefWindowProc(hWnd, message, wParam, lParam);
+					case IDM_ABOUT:
+						DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
+						break;
+					case IDM_EXIT:
+						DestroyWindow(hWnd);
+						break;
+					default:
+						return DefWindowProc(hWnd, message, wParam, lParam);
 				}
 			}
 			break;
@@ -238,14 +207,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				EndPaint(hWnd, &ps);
 			}
 			break;
-		case WM_SIZE:
+			case WM_SIZE:
 			{
 				if (g_pGame)
 				{
-					RECT rect;
+					RECT	rect;
 					GetClientRect(hWnd, &rect);
-					DWORD dwWndWidth = rect.right - rect.left;
-					DWORD dwWndHeight = rect.bottom - rect.top;
+					DWORD	dwWndWidth = rect.right - rect.left;
+					DWORD	dwWndHeight = rect.bottom - rect.top;
 					g_pGame->UpdateWindowSize(dwWndWidth, dwWndHeight);
 				}
 			}
@@ -254,21 +223,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			{
 				if (g_pGame)
 				{
-					UINT uiScanCode = (0x00ff0000 & lParam) >> 16;
-					UINT vkCode = MapVirtualKey(uiScanCode, MAPVK_VSC_TO_VK);
+					UINT	uiScanCode = (0x00ff0000 & lParam) >> 16;
+					UINT	vkCode = MapVirtualKey(uiScanCode, MAPVK_VSC_TO_VK);
 					if (!(lParam & 0x40000000))
 					{
 						g_pGame->OnKeyDown(vkCode, uiScanCode);
+
 					}
 				}
 			}
 			break;
+
 		case WM_KEYUP:
 			{
 				if (g_pGame)
 				{
-					UINT uiScanCode = (0x00ff0000 & lParam) >> 16;
-					UINT vkCode = MapVirtualKey(uiScanCode, MAPVK_VSC_TO_VK);
+					UINT	uiScanCode = (0x00ff0000 & lParam) >> 16;
+					UINT	vkCode = MapVirtualKey(uiScanCode, MAPVK_VSC_TO_VK);
 					g_pGame->OnKeyUp(vkCode, uiScanCode);
 				}
 			}
@@ -278,7 +249,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			break;
 		default:
 			return DefWindowProc(hWnd, message, wParam, lParam);
-		}
+	}
 	return 0;
 }
 
@@ -288,16 +259,16 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	UNREFERENCED_PARAMETER(lParam);
 	switch (message)
 	{
-	case WM_INITDIALOG:
-		return (INT_PTR)TRUE;
-
-	case WM_COMMAND:
-		if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
-		{
-			EndDialog(hDlg, LOWORD(wParam));
+		case WM_INITDIALOG:
 			return (INT_PTR)TRUE;
-		}
-		break;
+
+		case WM_COMMAND:
+			if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
+			{
+				EndDialog(hDlg, LOWORD(wParam));
+				return (INT_PTR)TRUE;
+			}
+			break;
 	}
 	return (INT_PTR)FALSE;
 }

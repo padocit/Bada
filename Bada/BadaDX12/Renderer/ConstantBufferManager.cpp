@@ -1,5 +1,6 @@
 #include "Pch.h"
 #include "Typedef.h"
+#include "Renderer_typedef.h"
 #include "SimpleConstantBufferPool.h"
 #include "ConstantBufferManager.h"
 

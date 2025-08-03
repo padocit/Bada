@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Typedef.h"
 #include "Renderer_typedef.h"
 #include "IRenderer.h"
 
@@ -29,7 +30,7 @@ public:
 	~CD3D12Renderer();
 
 	// Derived from IRenderer
-	BOOL	__stdcall Initialize(HWND hWnd, BOOL bEnableDebugLayer, BOOL bEnableGBV); // GBV: GPU Based Validation
+	BOOL	__stdcall Initialize(HWND hWnd, BOOL bEnableDebugLayer, BOOL bEnableGBV, const WCHAR* wchShaderPath);
 	void	__stdcall BeginRender();
 	void	__stdcall EndRender();
 	void	__stdcall Present();
@@ -75,6 +76,9 @@ public:
 	DWORD INL_GetScreenWidth() const { return m_dwWidth; }
 	DWORD INL_GetScreenHeight() const { return m_dwHeight; }
 	float INL_GetDPI() const { return m_fDPI; }
+
+	void SetCurrentPathForShader();
+	void RestoreCurrentPath();
 
 	// From Render-thread
 	void ProcessByThread(DWORD dwThreadIndex);
@@ -159,4 +163,7 @@ private:
 
 	XMVECTOR m_CamPos = {};
 	XMVECTOR m_CamDir = {};
+
+	WCHAR	m_wchCurrentPathBackup[_MAX_PATH] = {};
+	WCHAR	m_wchShaderPath[_MAX_PATH] = {};
 };

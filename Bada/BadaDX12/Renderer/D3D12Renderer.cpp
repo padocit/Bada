@@ -50,7 +50,7 @@ STDMETHODIMP_(ULONG) CD3D12Renderer::Release()
 	return ref_count;
 }
 
-BOOL __stdcall CD3D12Renderer::Initialize(HWND hWnd, BOOL bEnableDebugLayer, BOOL bEnableGBV)
+BOOL __stdcall CD3D12Renderer::Initialize(HWND hWnd, BOOL bEnableDebugLayer, BOOL bEnableGBV, const WCHAR* wchShaderPath)
 {
 	BOOL	bResult = FALSE;
 
@@ -267,6 +267,8 @@ lb_exit:
 
 	InitCamera();
 
+	wcscpy_s(m_wchShaderPath, wchShaderPath);
+
 	bResult = TRUE;
 lb_return:
 	if (pDebugController)
@@ -286,6 +288,16 @@ lb_return:
 	}
 	return bResult;
 
+}
+
+void CD3D12Renderer::SetCurrentPathForShader()
+{
+	GetCurrentDirectory(_MAX_PATH, m_wchCurrentPathBackup);
+	SetCurrentDirectory(m_wchShaderPath);
+}
+void CD3D12Renderer::RestoreCurrentPath()
+{
+	SetCurrentDirectory(m_wchCurrentPathBackup);
 }
 
 void CD3D12Renderer::InitCamera()
@@ -790,6 +802,10 @@ void* __stdcall CD3D12Renderer::CreateDynamicTexture(UINT texWidth, UINT texHeig
 void* __stdcall CD3D12Renderer::CreateTextureFromFile(const WCHAR* wchFileName)
 {
 	TEXTURE_HANDLE* pTexHandle = m_pTextureManager->CreateTextureFromFile(wchFileName);
+#ifdef _DEBUG
+	if (!pTexHandle)
+		__debugbreak();
+#endif
 	return pTexHandle;
 }
 

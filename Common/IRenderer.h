@@ -1,8 +1,8 @@
 #pragma once
 
 #include <Windows.h>
-#include "typedef.h"
-
+#include "Typedef.h"
+#include <combaseapi.h>
 
 interface IMeshObject : public IUnknown
 {
@@ -16,7 +16,7 @@ interface ISprite : public IUnknown
 };
 interface IRenderer : public IUnknown
 {
-	virtual BOOL	__stdcall Initialize(HWND hWnd, BOOL bEnableDebugLayer, BOOL bEnableGBV) = 0;
+	virtual BOOL	__stdcall Initialize(HWND hWnd, BOOL bEnableDebugLayer, BOOL bEnableGBV, const WCHAR* wchShaderPath) = 0;
 	virtual void	__stdcall BeginRender() = 0;
 	virtual void	__stdcall EndRender() = 0;
 	virtual void	__stdcall Present() = 0;

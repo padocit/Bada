@@ -181,10 +181,10 @@ BOOL CSpriteObject::InitPipelineState()
 #else
 	UINT compileFlags = 0;
 #endif
+	m_pRenderer->SetCurrentPathForShader();
 
 	ID3DBlob* pErrorBlob = nullptr;
-	if (FAILED(D3DCompileFromFile(L"./Shaders/shSprite.hlsl", nullptr, nullptr, "VSMain", "vs_5_0", 
-		compileFlags, 0, &pVertexShader, &pErrorBlob)))
+	if (FAILED(D3DCompileFromFile(L"shSprite.hlsl", nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &pVertexShader, &pErrorBlob)))
 	{
 		if (pErrorBlob != nullptr)
 		{
@@ -193,8 +193,7 @@ BOOL CSpriteObject::InitPipelineState()
 		}
 		__debugbreak();
 	}
-	if (FAILED(D3DCompileFromFile(L"./Shaders/shSprite.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", 
-		compileFlags, 0, &pPixelShader, &pErrorBlob)))
+	if (FAILED(D3DCompileFromFile(L"shSprite.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pPixelShader, &pErrorBlob)))
 	{
 		if (pErrorBlob != nullptr)
 		{
@@ -203,6 +202,7 @@ BOOL CSpriteObject::InitPipelineState()
 		}
 		__debugbreak();
 	}
+	m_pRenderer->RestoreCurrentPath();
 
 	// Define the vertex input layout.
 	D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =

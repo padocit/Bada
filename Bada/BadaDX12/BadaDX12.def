@@ -1,0 +1,6 @@
+LIBRARY     BadaDX12
+
+DESCRIPTION 'Bada DX12 Renderer 2025. by Padocit'
+
+EXPORTS
+	DllCreateInstance	PRIVATE
