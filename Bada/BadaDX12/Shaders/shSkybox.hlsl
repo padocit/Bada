@@ -25,11 +25,9 @@ PSInput VSMain(VSInput input)
 {
     PSInput output = (PSInput) 0;
     
-    matrix matViewProj = mul(g_matView, g_matProj);
-    matrix matWorldViewProj = mul(g_matWorld, matViewProj);
-
     output.posModel = input.pos.xyz;
-    output.position = mul(input.pos, matWorldViewProj);
+    output.position = mul(float4(input.pos.xyz, 0.0), g_matView); // only Rotation
+    output.position = mul(float4(output.position.xyz, 1.0), g_matProj);
 
     return output;
 }

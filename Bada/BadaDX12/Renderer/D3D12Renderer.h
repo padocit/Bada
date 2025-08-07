@@ -4,7 +4,7 @@
 #include "Renderer_typedef.h"
 #include "IRenderer.h"
 
-#define USE_MULTI_THREAD
+//#define USE_MULTI_THREAD
 
 class CD3D12ResourceManager;
 class CDescriptorPool;
@@ -90,6 +90,9 @@ public:
 	void SetCurrentPathForShader();
 	void RestoreCurrentPath();
 
+
+	void CD3D12Renderer::RenderToneMapping(ID3D12GraphicsCommandList* pCommandList);
+
 	// From Render-thread
 	void ProcessByThread(DWORD dwThreadIndex);
 
@@ -111,6 +114,11 @@ private:
 	void CleanupDescriptorHeapForRTV();
 	void CleanupDescriptorHeapForHDR();
 	void CleanupDescriptorHeapForDSV();
+
+	// 톤매핑 초기화 함수들
+	BOOL InitToneMappingRootSignature();
+	BOOL InitToneMappingPSO();
+	void CleanupToneMapping();
 
 	UINT64 Fence();
 	void WaitForFenceValue(UINT64 ExpectedFenceValue);
@@ -191,4 +199,8 @@ private:
     UINT m_dwMSAASampleCount = 4;                          // 4x MSAA
     UINT m_dwMSAAQuality = 0;
     UINT m_dwHDRColorFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+
+	// 톤매핑용 PSO와 루트 시그니처
+	ID3D12RootSignature* m_pToneMappingRootSignature = nullptr;
+	ID3D12PipelineState* m_pToneMappingPSO = nullptr;
 };

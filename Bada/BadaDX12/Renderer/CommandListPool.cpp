@@ -39,10 +39,12 @@ BOOL CCommandListPool::AddCmdList()
 		goto lb_return;
 	}
 
-	if (FAILED(m_pD3DDevice->CreateCommandAllocator(m_CommandListType, 
-		IID_PPV_ARGS(&pDirectCommandAllocator))))
+	HRESULT hr = m_pD3DDevice->CreateCommandAllocator(m_CommandListType,
+		IID_PPV_ARGS(&pDirectCommandAllocator));
+	if (FAILED(hr))
 	{
 	#ifdef _DEBUG
+		hr = m_pD3DDevice->GetDeviceRemovedReason();
 		__debugbreak();
 	#endif
 		goto lb_return;

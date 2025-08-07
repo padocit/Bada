@@ -32,8 +32,7 @@ BOOL CSkybox::Initialize(CGame* pGame)
 
 	m_pMeshObj = CreateSkyboxMeshObject();
 	if (m_pMeshObj)
-	{
-		SetScale(100.0f, 100.0f, 100.0f);	// Skybox 크기 설정
+	{	
 		bResult = TRUE;
 	}
 	return bResult;
@@ -102,12 +101,12 @@ IMeshObject* CSkybox::CreateSkyboxMeshObject()
 	// create vertices and indices
 	WORD	pIndexList[36] = {};
 	BasicVertex* pVertexList = nullptr;
-	DWORD dwVertexCount = CreateBoxMesh(&pVertexList, pIndexList, (DWORD)_countof(pIndexList), 1.0f, TRUE);
+	DWORD dwVertexCount = CreateBoxMesh(&pVertexList, pIndexList, (DWORD)_countof(pIndexList), 40.0f, TRUE);
 
 	// create SkyboxMeshObject from Renderer
 	pMeshObj = m_pRenderer->CreateSkyboxMeshObject();
 
-	const WCHAR* wchTexFileName = L"../../Assets/DGarden_specularIBL.dds";
+	const WCHAR* wchTexFileName = L"../../Assets/SampleEnvHDR.dds";
 
 	// Set meshes to the SkyboxMeshObject
 	pMeshObj->BeginCreateMesh(pVertexList, dwVertexCount, 6);

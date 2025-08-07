@@ -96,7 +96,7 @@ BOOL CBasicMeshObject::InitRootSignature()
 	// default sampler
 	D3D12_STATIC_SAMPLER_DESC sampler = {};
 	SetDefaultSamplerDesc(&sampler, 0);
-	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 
 	// Allow input layout and deny uneccessary access to certain pipeline stages.
 	D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags =
@@ -195,9 +195,10 @@ BOOL CBasicMeshObject::InitPipelineState()
 	psoDesc.SampleMask = UINT_MAX;
 	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	psoDesc.NumRenderTargets = 1;
-	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
-	psoDesc.SampleDesc.Count = 1;
+	psoDesc.SampleDesc.Count = 4;
+	psoDesc.SampleDesc.Quality = 0;
 	if (FAILED(pD3DDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pPipelineState))))
 	{
 		__debugbreak();

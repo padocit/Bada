@@ -353,7 +353,7 @@ void CGame::Render()
 		dwObjCount++;
 	}	
 	// render dynamic texture as text
-	m_pRenderer->RenderSpriteWithTex(m_pSpriteObjCommon, 0, 0, 1.0f, 1.0f, nullptr, 0.0f, m_pTextTexTexHandle);
+	//m_pRenderer->RenderSpriteWithTex(m_pSpriteObjCommon, 0, 0, 1.0f, 1.0f, nullptr, 0.0f, m_pTextTexTexHandle);
 
 	// end
 	m_pRenderer->EndRender();

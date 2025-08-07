@@ -22,6 +22,7 @@
 #include <dxgidebug.h>
 #include <DirectXMath.h>
 #include <process.h>
+#include <d3dcompiler.h>
 
 using namespace DirectX;
 
@@ -219,7 +220,12 @@ lb_exit:
 	for (UINT n = 0; n < SWAP_CHAIN_FRAME_COUNT; n++)
 	{
 		m_pSwapChain->GetBuffer(n, IID_PPV_ARGS(&m_pRenderTargets[n]));
-		m_pD3DDevice->CreateRenderTargetView(m_pRenderTargets[n], nullptr, rtvHandle);
+
+		D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+		rtvDesc.Texture2D.MipSlice = 0;
+		m_pD3DDevice->CreateRenderTargetView(m_pRenderTargets[n], &rtvDesc, rtvHandle);
 		rtvHandle.Offset(1, m_rtvDescriptorSize);
 	}
 	m_srvDescriptorSize = m_pD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -281,6 +287,19 @@ lb_exit:
 
 	wcscpy_s(m_wchShaderPath, wchShaderPath);
 
+	// 톤매핑 초기화
+	if (!InitToneMappingRootSignature())
+	{
+		__debugbreak();
+		goto lb_return;
+	}
+	if (!InitToneMappingPSO())
+	{
+		__debugbreak();
+		goto lb_return;
+	}
+
+
 	bResult = TRUE;
 lb_return:
 	if (pDebugController)
@@ -300,6 +319,183 @@ lb_return:
 	}
 	return bResult;
 
+}
+
+BOOL CD3D12Renderer::InitToneMappingRootSignature()
+{
+	ID3DBlob* pSignature = nullptr;
+	ID3DBlob* pError = nullptr;
+
+	// 톤매핑용 루트 시그니처 - SRV 하나만 필요 (HDR 텍스처)
+	CD3DX12_DESCRIPTOR_RANGE ranges[1] = {};
+	ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0); // t0 : HDR Texture
+
+	CD3DX12_ROOT_PARAMETER rootParameters[1] = {};
+	rootParameters[0].InitAsDescriptorTable(_countof(ranges), ranges, D3D12_SHADER_VISIBILITY_PIXEL);
+
+	// 샘플러
+	D3D12_STATIC_SAMPLER_DESC sampler = {};
+	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+	sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	sampler.MipLODBias = 0;
+	sampler.MaxAnisotropy = 16;
+	sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+	sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+	sampler.MinLOD = 0.0f;
+	sampler.MaxLOD = D3D12_FLOAT32_MAX;
+	sampler.ShaderRegister = 0;
+	sampler.RegisterSpace = 0;
+	sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+	// 루트 시그니처 플래그
+	D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags =
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
+
+	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
+	rootSignatureDesc.Init(_countof(rootParameters), rootParameters, 1, &sampler, rootSignatureFlags);
+
+	if (FAILED(D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &pSignature, &pError)))
+	{
+		__debugbreak();
+		return FALSE;
+	}
+
+	if (FAILED(m_pD3DDevice->CreateRootSignature(0, pSignature->GetBufferPointer(), pSignature->GetBufferSize(), IID_PPV_ARGS(&m_pToneMappingRootSignature))))
+	{
+		__debugbreak();
+		if (pSignature)
+		{
+			pSignature->Release();
+			pSignature = nullptr;
+		}
+		if (pError)
+		{
+			pError->Release();
+			pError = nullptr;
+		}
+		return FALSE;
+	}
+
+	if (pSignature)
+	{
+		pSignature->Release();
+		pSignature = nullptr;
+	}
+	if (pError)
+	{
+		pError->Release();
+		pError = nullptr;
+	}
+
+	return TRUE;
+}
+
+BOOL CD3D12Renderer::InitToneMappingPSO()
+{
+	ID3DBlob* pVS = nullptr;
+	ID3DBlob* pPS = nullptr;
+	ID3DBlob* pError = nullptr;
+
+	SetCurrentPathForShader();
+
+	DWORD dwShaderFlags = D3DCOMPILE_ENABLE_STRICTNESS;
+#ifdef _DEBUG
+	dwShaderFlags |= D3DCOMPILE_DEBUG;
+	dwShaderFlags |= D3DCOMPILE_SKIP_OPTIMIZATION;
+#endif
+
+	// 톤매핑용 버텍스 쉐이더 컴파일
+	if (FAILED(D3DCompileFromFile(L"shToneMapping.hlsl", nullptr, nullptr, "VSMain", "vs_5_0", dwShaderFlags, 0, &pVS, &pError)))
+	{
+		if (pError)
+		{
+			OutputDebugStringA((char*)pError->GetBufferPointer());
+			pError->Release();
+		}
+		__debugbreak();
+		RestoreCurrentPath();
+		return FALSE;
+	}
+
+	// 톤매핑용 픽셀 쉐이더 컴파일
+	if (FAILED(D3DCompileFromFile(L"shToneMapping.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", dwShaderFlags, 0, &pPS, &pError)))
+	{
+		if (pError)
+		{
+			OutputDebugStringA((char*)pError->GetBufferPointer());
+			pError->Release();
+		}
+		__debugbreak();
+		RestoreCurrentPath();
+		return FALSE;
+	}
+
+	RestoreCurrentPath();
+
+	// PSO 생성
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.InputLayout = { nullptr, 0 }; // 정점 입력 없음 (풀스크린 삼각형)
+	psoDesc.pRootSignature = m_pToneMappingRootSignature;
+	psoDesc.VS = { reinterpret_cast<UINT8*>(pVS->GetBufferPointer()), pVS->GetBufferSize() };
+	psoDesc.PS = { reinterpret_cast<UINT8*>(pPS->GetBufferPointer()), pPS->GetBufferSize() };
+	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	psoDesc.DepthStencilState.DepthEnable = FALSE;
+	psoDesc.DepthStencilState.StencilEnable = FALSE;
+	psoDesc.SampleMask = UINT_MAX;
+	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	psoDesc.NumRenderTargets = 1;
+	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM; // SwapChain 형식
+	psoDesc.SampleDesc.Count = 1;
+	psoDesc.SampleDesc.Quality = 0;
+
+	if (FAILED(m_pD3DDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pToneMappingPSO))))
+	{
+		__debugbreak();
+		if (pVS)
+		{
+			pVS->Release();
+			pVS = nullptr;
+		}
+		if (pPS)
+		{
+			pPS->Release();
+			pPS = nullptr;
+		}
+		return FALSE;
+	}
+
+	if (pVS)
+	{
+		pVS->Release();
+		pVS = nullptr;
+	}
+	if (pPS)
+	{
+		pPS->Release();
+		pPS = nullptr;
+	}
+
+	return TRUE;
+}
+
+void CD3D12Renderer::CleanupToneMapping()
+{
+	if (m_pToneMappingPSO)
+	{
+		m_pToneMappingPSO->Release();
+		m_pToneMappingPSO = nullptr;
+	}
+	if (m_pToneMappingRootSignature)
+	{
+		m_pToneMappingRootSignature->Release();
+		m_pToneMappingRootSignature = nullptr;
+	}
 }
 
 void CD3D12Renderer::SetCurrentPathForShader()
@@ -387,9 +583,9 @@ BOOL CD3D12Renderer::CreateHDRRenderTargets(UINT width, UINT height)
 	// MSAA HDR render target 생성
 	D3D12_CLEAR_VALUE hdrClearValue = {};
 	hdrClearValue.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-	hdrClearValue.Color[0] = 1.0f;
+	hdrClearValue.Color[0] = 0.0f;
 	hdrClearValue.Color[1] = 0.0f;
-	hdrClearValue.Color[2] = 0.0f;
+	hdrClearValue.Color[2] = 1.0f;
 	hdrClearValue.Color[3] = 1.0f;
 
 	CD3DX12_RESOURCE_DESC hdrDesc = CD3DX12_RESOURCE_DESC::Tex2D(
@@ -458,7 +654,7 @@ BOOL CD3D12Renderer::CreateHDRRenderTargets(UINT width, UINT height)
 			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 			D3D12_HEAP_FLAG_NONE,
 			&hdrDesc,
-			D3D12_RESOURCE_STATE_COPY_DEST, // 복사 대상 상태
+			D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE, // SRV 상태로 초기화
 			nullptr, // Clear value 불필요
 			IID_PPV_ARGS(&m_pHDRResolvedTarget[n])
 		)))
@@ -493,7 +689,7 @@ BOOL CD3D12Renderer::CreateDepthStencil(UINT width, UINT height)
 	// Create DSV
 	D3D12_DEPTH_STENCIL_VIEW_DESC depthStencilDesc = {};
 	depthStencilDesc.Format = DXGI_FORMAT_D32_FLOAT;
-	depthStencilDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	depthStencilDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
 	depthStencilDesc.Flags = D3D12_DSV_FLAG_NONE;
 
 	D3D12_CLEAR_VALUE depthOptimizedClearValue = {};
@@ -509,8 +705,8 @@ BOOL CD3D12Renderer::CreateDepthStencil(UINT width, UINT height)
 		1,
 		1,
 		DXGI_FORMAT_R32_TYPELESS,
-		1,
-		0,
+		m_dwMSAASampleCount,
+		m_dwMSAAQuality,
 		D3D12_TEXTURE_LAYOUT_UNKNOWN,
 		D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL
 	);
@@ -582,7 +778,12 @@ BOOL __stdcall CD3D12Renderer::UpdateWindowSize(DWORD dwBackBufferWidth, DWORD d
 	for (UINT n = 0; n < SWAP_CHAIN_FRAME_COUNT; n++)
 	{
 		m_pSwapChain->GetBuffer(n, IID_PPV_ARGS(&m_pRenderTargets[n]));
-		m_pD3DDevice->CreateRenderTargetView(m_pRenderTargets[n], nullptr, rtvHandle);
+
+		D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+		rtvDesc.Texture2D.MipSlice = 0;
+		m_pD3DDevice->CreateRenderTargetView(m_pRenderTargets[n], &rtvDesc, rtvHandle);
 		rtvHandle.Offset(1, m_rtvDescriptorSize);
 	}
 
@@ -614,16 +815,17 @@ void __stdcall CD3D12Renderer::BeginRender()
 	CCommandListPool* pCommandListPool = m_ppCommandListPool[m_dwCurContextIndex][0];
 	ID3D12GraphicsCommandList* pCommandList = pCommandListPool->GetCurrentCommandList();
 
-	pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRenderTargets[m_uiRenderTargetIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
-
-	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_pRTVHeap->GetCPUDescriptorHandleForHeapStart(), 
-		m_uiRenderTargetIndex, m_rtvDescriptorSize);
+	// HDR RTV no need to transition, it's always in render target state.
+	
+	// HDR 렌더타겟 바인딩
+	CD3DX12_CPU_DESCRIPTOR_HANDLE hdrRtvHandle(m_pHDRRTVHeap->GetCPUDescriptorHandleForHeapStart(),
+		m_uiRenderTargetIndex, m_hdrRTVDescriptorSize);
 	CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(m_pDSVHeap->GetCPUDescriptorHandleForHeapStart());
 
-	// Record commands.
-	const float BackColor[] = { 0.0f, 0.0f, 1.0f, 1.0f };
-	pCommandList->ClearRenderTargetView(rtvHandle, BackColor, 0, nullptr);
-	pCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	// HDR 렌더타겟 클리어
+	const float hdrClearColor[] = { 0.0f, 0.0f, 1.0f, 1.0f }; // HDR용 클리어 컬러
+	pCommandList->ClearRenderTargetView(hdrRtvHandle, hdrClearColor, 0, nullptr);
+	pCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
 	// 즉시 실행
 	pCommandListPool->CloseAndExecute(m_pCommandQueue);
@@ -759,7 +961,8 @@ void __stdcall CD3D12Renderer::EndRender()
 {
 	CCommandListPool* pCommandListPool = m_ppCommandListPool[m_dwCurContextIndex][0];
 
-	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_pRTVHeap->GetCPUDescriptorHandleForHeapStart(), m_uiRenderTargetIndex, m_rtvDescriptorSize);
+	//CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_pRTVHeap->GetCPUDescriptorHandleForHeapStart(), m_uiRenderTargetIndex, m_rtvDescriptorSize);
+	CD3DX12_CPU_DESCRIPTOR_HANDLE hdrRtvHandle(m_pHDRRTVHeap->GetCPUDescriptorHandleForHeapStart(), m_uiRenderTargetIndex, m_hdrRTVDescriptorSize);
 	CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(m_pDSVHeap->GetCPUDescriptorHandleForHeapStart());
 
 #ifdef USE_MULTI_THREAD
@@ -773,12 +976,94 @@ void __stdcall CD3D12Renderer::EndRender()
 	for (DWORD i = 0; i < m_dwRenderThreadCount; i++)
 	{
 		// Only 1 CommandList
-		m_ppRenderQueue[i]->Process(i, pCommandList, m_pCommandQueue, 400, rtvHandle, dsvHandle, &m_Viewport, &m_ScissorRect);
+		//m_ppRenderQueue[i]->Process(i, pCommandList, m_pCommandQueue, 400, rtvHandle, dsvHandle, &m_Viewport, &m_ScissorRect);
+		m_ppRenderQueue[i]->Process(i, pCommandListPool, m_pCommandQueue, 400, hdrRtvHandle, dsvHandle, &m_Viewport, &m_ScissorRect);
 	}
 #endif
-	
-	// Present
+
+	// MSAA Resolve
 	ID3D12GraphicsCommandList* pCommandList = pCommandListPool->GetCurrentCommandList();
+	if (m_dwMSAASampleCount > 1)
+	{
+		// MSAA resolve
+		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			m_pHDRRenderTarget[m_uiRenderTargetIndex],
+			D3D12_RESOURCE_STATE_RENDER_TARGET,
+			D3D12_RESOURCE_STATE_RESOLVE_SOURCE
+		));
+
+		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			m_pHDRResolvedTarget[m_uiRenderTargetIndex],
+			D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
+			D3D12_RESOURCE_STATE_RESOLVE_DEST
+		));
+
+		pCommandList->ResolveSubresource(
+			m_pHDRResolvedTarget[m_uiRenderTargetIndex], 0,
+			m_pHDRRenderTarget[m_uiRenderTargetIndex], 0,
+			DXGI_FORMAT_R16G16B16A16_FLOAT
+		);
+
+		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			m_pHDRRenderTarget[m_uiRenderTargetIndex],
+			D3D12_RESOURCE_STATE_RESOLVE_SOURCE,
+			D3D12_RESOURCE_STATE_RENDER_TARGET
+		));
+		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			m_pHDRResolvedTarget[m_uiRenderTargetIndex],
+			D3D12_RESOURCE_STATE_RESOLVE_DEST,
+			D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE
+		));
+	}
+	else
+	{
+		// Non-MSAA: 단순 복사
+		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			m_pHDRRenderTarget[m_uiRenderTargetIndex],
+			D3D12_RESOURCE_STATE_RENDER_TARGET,
+			D3D12_RESOURCE_STATE_COPY_SOURCE
+		));
+
+		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			m_pHDRResolvedTarget[m_uiRenderTargetIndex],
+			D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
+			D3D12_RESOURCE_STATE_COPY_DEST
+		));
+
+		pCommandList->CopyResource(
+			m_pHDRResolvedTarget[m_uiRenderTargetIndex],
+			m_pHDRRenderTarget[m_uiRenderTargetIndex]
+		);
+
+		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			m_pHDRRenderTarget[m_uiRenderTargetIndex],
+			D3D12_RESOURCE_STATE_COPY_SOURCE,
+			D3D12_RESOURCE_STATE_RENDER_TARGET
+		));
+
+		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			m_pHDRResolvedTarget[m_uiRenderTargetIndex],
+			D3D12_RESOURCE_STATE_COPY_DEST,
+			D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE
+		));
+	}
+
+	// 톤매핑: HDR → SDR (SwapChain 버퍼)
+	// RTV Clear
+	pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRenderTargets[m_uiRenderTargetIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_pRTVHeap->GetCPUDescriptorHandleForHeapStart(),
+		m_uiRenderTargetIndex, m_rtvDescriptorSize);
+	const float BackColor[] = { 0.0f, 0.0f, 1.0f, 1.0f };
+	pCommandList->ClearRenderTargetView(rtvHandle, BackColor, 0, nullptr);
+
+	// TODO: 여기서 톤매핑 쉐이더 실행
+	// - HDR Resolved 타겟을 SRV로 바인딩
+	// - SwapChain 버퍼를 RTV로 바인딩
+	// - 풀스크린 쿼드 렌더링으로 톤매핑 수행
+	RenderToneMapping(pCommandList);
+	
+
+	// Present
 	pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRenderTargets[m_uiRenderTargetIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
 	pCommandListPool->CloseAndExecute(m_pCommandQueue);
@@ -788,6 +1073,41 @@ void __stdcall CD3D12Renderer::EndRender()
 		m_ppRenderQueue[i]->Reset();
 	}
 }
+
+void CD3D12Renderer::RenderToneMapping(ID3D12GraphicsCommandList* pCommandList)
+{
+	// 1. 먼저 루트 시그니처와 PSO 설정
+	pCommandList->SetGraphicsRootSignature(m_pToneMappingRootSignature);
+	pCommandList->SetPipelineState(m_pToneMappingPSO);
+	
+	// 2. 뷰포트와 시저 렉트 설정
+	pCommandList->RSSetViewports(1, &m_Viewport);
+	pCommandList->RSSetScissorRects(1, &m_ScissorRect);
+
+	// 3. 디스크립터 힙 설정
+	pCommandList->SetDescriptorHeaps(1, &m_pHDRResolvedSRVHeap);
+	
+	// 4. HDR SRV 바인딩 (이제 안전함)
+	CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(
+		m_pHDRResolvedSRVHeap->GetGPUDescriptorHandleForHeapStart(), 
+		m_uiRenderTargetIndex, 
+		m_hdrSRVDescriptorSize
+	);
+	pCommandList->SetGraphicsRootDescriptorTable(0, srvHandle);
+
+	// 5. SwapChain RTV 바인딩
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(
+		m_pRTVHeap->GetCPUDescriptorHandleForHeapStart(),
+		m_uiRenderTargetIndex, 
+		m_rtvDescriptorSize
+	);
+	pCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
+
+	// 6. 정점 버퍼 없이 풀스크린 쿼드 그리기
+	pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	pCommandList->DrawInstanced(3, 1, 0, 0);
+}
+
 
 void __stdcall CD3D12Renderer::Present()
 {
@@ -1062,6 +1382,7 @@ BOOL CD3D12Renderer::CreateDescriptorHeapForHDR()
 	{
 		__debugbreak();
 	}
+	hdrHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 	// HDR Resolved 디스크립터힙 (3칸)
 	if (FAILED(m_pD3DDevice->CreateDescriptorHeap(&hdrHeapDesc, IID_PPV_ARGS(&m_pHDRResolvedHeap))))
 	{
@@ -1218,6 +1539,8 @@ void CD3D12Renderer::Cleanup()
 	CleanupDescriptorHeapForHDR();
 	CleanupDescriptorHeapForDSV();
 
+	CleanupToneMapping();
+
 	for (DWORD i = 0; i < SWAP_CHAIN_FRAME_COUNT; i++)
 	{
 		if (m_pRenderTargets[i])
@@ -1329,11 +1652,12 @@ void CD3D12Renderer::ProcessByThread(DWORD dwThreadIndex)
 	// 현재 사용중인 command list pool
 	CCommandListPool* pCommandListPool = m_ppCommandListPool[m_dwCurContextIndex][dwThreadIndex];	
 
-	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_pRTVHeap->GetCPUDescriptorHandleForHeapStart(), m_uiRenderTargetIndex, m_rtvDescriptorSize);
+	//CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_pRTVHeap->GetCPUDescriptorHandleForHeapStart(), m_uiRenderTargetIndex, m_rtvDescriptorSize);
+	CD3DX12_CPU_DESCRIPTOR_HANDLE hdrRtvHandle(m_pHDRRTVHeap->GetCPUDescriptorHandleForHeapStart(), m_uiRenderTargetIndex, m_hdrRTVDescriptorSize);
 	CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(m_pDSVHeap->GetCPUDescriptorHandleForHeapStart());
 
 	// CommandList 1개당 최대 400개씩 처리
-	m_ppRenderQueue[dwThreadIndex]->Process(dwThreadIndex, pCommandListPool, m_pCommandQueue, 400, rtvHandle, dsvHandle, &m_Viewport, &m_ScissorRect);
+	m_ppRenderQueue[dwThreadIndex]->Process(dwThreadIndex, pCommandListPool, m_pCommandQueue, 400, hdrRtvHandle, dsvHandle, &m_Viewport, &m_ScissorRect);
 
 	LONG lCurCount = _InterlockedDecrement(&m_lActiveThreadCount); // 1 감소, atomic
 	if (0 == lCurCount)

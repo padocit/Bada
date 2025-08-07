@@ -70,8 +70,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	MSG msg;
 
 	g_pGame = new CGame;
-	//g_pGame->Initialize(g_hMainWindow, TRUE, TRUE);
-	g_pGame->Initialize(g_hMainWindow, FALSE, FALSE);
+	g_pGame->Initialize(g_hMainWindow, TRUE, TRUE);
+	//g_pGame->Initialize(g_hMainWindow, FALSE, FALSE);
 
 	SetWindowText(g_hMainWindow, L"Bada Renderer");
 	// Main message loop:
