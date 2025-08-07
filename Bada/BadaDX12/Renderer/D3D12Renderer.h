@@ -15,6 +15,7 @@ class CFontManager;
 class CTextureManager;
 class CRenderQueue;
 class CCommandListPool;
+class CCamera;
 struct RENDER_THREAD_DESC;
 
 class CD3D12Renderer : public IRenderer
@@ -37,13 +38,15 @@ public:
 	BOOL	__stdcall UpdateWindowSize(DWORD dwBackBufferWidth, DWORD dwBackBufferHeight);
 
 	IMeshObject* __stdcall CreateBasicMeshObject();
+	IMeshObject* __stdcall CreateSkyboxMeshObject();
 
 	ISprite* __stdcall CreateSpriteObject();
 	ISprite* __stdcall CreateSpriteObject(const WCHAR* wchTexFileName, int iPosX, int iPosY, int iWidth, int iHeight);
 
+	void* __stdcall CreateMagentaTexture(UINT texWidth, UINT texHeight);
 	void* __stdcall CreateTiledTexture(UINT texWidth, UINT texHeight, DWORD r, DWORD g, DWORD b);
 	void* __stdcall CreateDynamicTexture(UINT texWidth, UINT texHeight);
-	void* __stdcall CreateTextureFromFile(const WCHAR* wchFileName);
+	void* __stdcall CreateTextureFromFile(const WCHAR* wchFileName, BOOL bIsCubeMap = FALSE);
 	void  __stdcall DeleteTexture(void* pTexHandle);
 
 	void* __stdcall CreateFontObject(const WCHAR* wchFontFamilyName, float fFontSize);
@@ -51,6 +54,7 @@ public:
 	BOOL  __stdcall WriteTextToBitmap(BYTE* pDestImage, UINT destWidth, UINT destHeight, UINT destPitch, int* piOutWidth, int* piOutHeight, void* pFontObjHandle, const WCHAR* wchString, DWORD dwLen);
 
 	void __stdcall RenderMeshObject(IMeshObject* pMeshObj, const XMMATRIX* pMatWorld);
+	void __stdcall RenderSkybox(IMeshObject* pMeshObj, const XMMATRIX* pMatWorld);
 	void __stdcall RenderSpriteWithTex(void* pSprObjHandle, int iPosX, int iPosY, float fScaleX, float fScaleY, const RECT* pRect, float Z, void* pTexHandle);
 	void __stdcall RenderSprite(void* pSprObjHandle, int iPosX, int iPosY, float fScaleX, float fScaleY, float Z);
 	void __stdcall UpdateTextureWithImage(void* pTexHandle, const BYTE* pSrcBits, UINT srcWidth, UINT srcHeight);
@@ -58,7 +62,12 @@ public:
 	void __stdcall SetCameraPos(float x, float y, float z);
 	void __stdcall MoveCamera(float x, float y, float z);
 	void __stdcall GetCameraPos(float* pfOutX, float* pfOutY, float* pfOutZ);
-	void __stdcall SetCamera(const XMVECTOR* pCamPos, const XMVECTOR* pCamDir, const XMVECTOR* pCamUp);
+	void __stdcall SetCameraRot(float fPitch, float fYaw, float fRoll);
+	void __stdcall RotateCamera(float fPitch, float fYaw, float fRoll);
+	void __stdcall GetCameraRot(float* pfOutPitch, float* pfOutYaw, float* pfOutRoll);
+	void __stdcall MouseRotateCameraDelta(float deltaX, float deltaY);
+
+	//void __stdcall SetCamera(const XMVECTOR* pCamPos, const XMVECTOR* pCamDir, const XMVECTOR* pCamUp);
 
 	DWORD __stdcall GetCommandListCount();
 
@@ -76,6 +85,7 @@ public:
 	DWORD INL_GetScreenWidth() const { return m_dwWidth; }
 	DWORD INL_GetScreenHeight() const { return m_dwHeight; }
 	float INL_GetDPI() const { return m_fDPI; }
+	CCamera* INL_GetCamera() const { return m_pCamera; }
 
 	void SetCurrentPathForShader();
 	void RestoreCurrentPath();
@@ -90,13 +100,16 @@ private:
 
 	void InitCamera();
 
+	BOOL CreateHDRRenderTargets(UINT width, UINT height);
 	BOOL CreateDepthStencil(UINT width, UINT height);
 
 	void CreateFence();
 	void CleanupFence();
 	BOOL CreateDescriptorHeapForRTV();
+	BOOL CreateDescriptorHeapForHDR();
 	BOOL CreateDescriptorHeapForDSV();
 	void CleanupDescriptorHeapForRTV();
+	void CleanupDescriptorHeapForHDR();
 	void CleanupDescriptorHeapForDSV();
 
 	UINT64 Fence();
@@ -143,13 +156,17 @@ private:
 	DWORD			m_dwHeight = 0;
 	float m_fDPI = 96.0f;
 
-	ID3D12Resource* m_pRenderTargets[SWAP_CHAIN_FRAME_COUNT] = {};
+	UINT m_MultiSampleQualityLevels = 0;
+
+	ID3D12Resource* m_pRenderTargets[SWAP_CHAIN_FRAME_COUNT] = {}; // R8G8B8A8_UNORM (SDR)
 	ID3D12Resource* m_pDepthStencil = nullptr;
 	ID3D12DescriptorHeap* m_pRTVHeap = nullptr;
 	ID3D12DescriptorHeap* m_pDSVHeap = nullptr;
 	ID3D12DescriptorHeap* m_pSRVHeap = nullptr;
 	UINT	m_rtvDescriptorSize = 0;
 	UINT	m_srvDescriptorSize = 0;
+	UINT	m_hdrRTVDescriptorSize = 0;
+	UINT	m_hdrSRVDescriptorSize = 0;
 	UINT	m_dsvDescriptorSize = 0;
 	UINT	m_dwSwapChainFlags = 0;
 	UINT	m_uiRenderTargetIndex = 0;
@@ -158,12 +175,20 @@ private:
 
 	DWORD	m_dwCurContextIndex = 0;
 
-	XMMATRIX m_matView = {};
-	XMMATRIX m_matProj = {};
-
-	XMVECTOR m_CamPos = {};
-	XMVECTOR m_CamDir = {};
-
 	WCHAR	m_wchCurrentPathBackup[_MAX_PATH] = {};
 	WCHAR	m_wchShaderPath[_MAX_PATH] = {};
+
+	CCamera* m_pCamera = nullptr;
+
+    //TODO: HDR rendering resources
+	ID3D12Resource* m_pHDRRenderTarget[SWAP_CHAIN_FRAME_COUNT] = {};          // R16G16B16A16_FLOAT with MSAA
+	ID3D12Resource* m_pHDRResolvedTarget[SWAP_CHAIN_FRAME_COUNT] = {};        // R16G16B16A16_FLOAT without MSAA
+    ID3D12DescriptorHeap* m_pHDRRTVHeap = nullptr;         // For HDR RTVs
+    ID3D12DescriptorHeap* m_pHDRResolvedHeap = nullptr;         // For HDR Resolve buffer
+    ID3D12DescriptorHeap* m_pHDRResolvedSRVHeap = nullptr;         // For HDR SRVs
+    
+    // MSAA settings for HDR
+    UINT m_dwMSAASampleCount = 4;                          // 4x MSAA
+    UINT m_dwMSAAQuality = 0;
+    UINT m_dwHDRColorFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
 };

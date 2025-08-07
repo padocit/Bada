@@ -4,21 +4,15 @@
 #include "IRenderer.h"
 #include "LinkedList.h"
 
-enum PRIMITIVE_TYPE
-{
-	PRIMITIVE_TYPE_BOX,
-	PRIMITIVE_TYPE_SPHERE,
-	PRIMITIVE_TYPE_QUAD,
-};
-
 class CGame;
-class CGameObject
+
+class CSkybox
 {
 public:
-	CGameObject();
-	~CGameObject();
+	CSkybox();
+	~CSkybox();
 
-	BOOL	Initialize(CGame* pGame, PRIMITIVE_TYPE primitiveType = PRIMITIVE_TYPE_BOX);
+	BOOL	Initialize(CGame* pGame);
 	void	SetPosition(float x, float y, float z);
 	void	SetScale(float x, float y, float z);
 	void	SetRotationY(float fRotY);
@@ -29,9 +23,7 @@ public:
 	SORT_LINK	m_LinkInGame;
 
 private:
-	IMeshObject* CreateBoxMeshObject();
-	IMeshObject* CreateSphereMeshObject();
-	IMeshObject* CreateQuadMesh();
+	IMeshObject* CreateSkyboxMeshObject();
 
 	void	UpdateTransform();
 	void	Cleanup();
@@ -41,9 +33,7 @@ private:
 	IRenderer* m_pRenderer = nullptr;
 	IMeshObject* m_pMeshObj = nullptr;
 
-	PRIMITIVE_TYPE m_PrimitiveType = PRIMITIVE_TYPE_BOX;
-	
-	XMVECTOR m_Scale = {1.0f, 1.0f, 1.0f, 0.0f};
+	XMVECTOR m_Scale = { 1.0f, 1.0f, 1.0f, 0.0f };
 	XMVECTOR m_Pos = {};
 	float m_fRotY = 0.0f;
 

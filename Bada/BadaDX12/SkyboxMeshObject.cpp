@@ -1,32 +1,33 @@
-ï»¿#include "Pch.h"
-#include "BasicMeshObject.h"
+#include "Pch.h"
 #include "D3D12Renderer.h"
 #include "D3D12ResourceManager.h"
 #include "Typedef.h"
 #include "DescriptorPool.h"
 #include "SimpleConstantBufferPool.h"
 #include "SingleDescriptorAllocator.h"
+#include "BasicMeshObject.h"
+#include "SkyboxMeshObject.h"
 
 #include <d3dcompiler.h>
 #include <DirectXMath.h>
 
 using namespace DirectX;
 
-ID3D12RootSignature* CBasicMeshObject::m_pRootSignature = nullptr;
-ID3D12PipelineState* CBasicMeshObject::m_pPipelineState = nullptr;
-DWORD CBasicMeshObject::m_dwInitRefCount = 0;
+ID3D12RootSignature* CSkyboxMeshObject::m_pRootSignature = nullptr;
+ID3D12PipelineState* CSkyboxMeshObject::m_pPipelineState = nullptr;
+DWORD CSkyboxMeshObject::m_dwInitRefCount = 0;
 
-STDMETHODIMP CBasicMeshObject::QueryInterface(REFIID refiid, void** ppv)
+STDMETHODIMP CSkyboxMeshObject::QueryInterface(REFIID refiid, void** ppv)
 {
 	return E_NOINTERFACE;
 }
-STDMETHODIMP_(ULONG) CBasicMeshObject::AddRef()
+STDMETHODIMP_(ULONG) CSkyboxMeshObject::AddRef()
 {
 	m_dwRefCount++;
 	return m_dwRefCount;
 
 }
-STDMETHODIMP_(ULONG) CBasicMeshObject::Release()
+STDMETHODIMP_(ULONG) CSkyboxMeshObject::Release()
 {
 	DWORD	ref_count = --m_dwRefCount;
 	if (!m_dwRefCount)
@@ -35,16 +36,16 @@ STDMETHODIMP_(ULONG) CBasicMeshObject::Release()
 	return ref_count;
 }
 
-CBasicMeshObject::CBasicMeshObject()
+CSkyboxMeshObject::CSkyboxMeshObject()
 {
 }
 
-CBasicMeshObject::~CBasicMeshObject()
+CSkyboxMeshObject::~CSkyboxMeshObject()
 {
 	Cleanup();
 }
 
-BOOL CBasicMeshObject::Initialize(CD3D12Renderer* pRenderer)
+BOOL CSkyboxMeshObject::Initialize(CD3D12Renderer* pRenderer)
 {
 	m_pRenderer = pRenderer;
 
@@ -52,7 +53,7 @@ BOOL CBasicMeshObject::Initialize(CD3D12Renderer* pRenderer)
 	return bResult;
 }
 
-BOOL CBasicMeshObject::InitCommonResources()
+BOOL CSkyboxMeshObject::InitCommonResources()
 {
 	if (m_dwInitRefCount)
 		goto lb_true;
@@ -65,7 +66,7 @@ lb_true:
 	return m_dwInitRefCount;
 }
 
-BOOL CBasicMeshObject::InitRootSignature()
+BOOL CSkyboxMeshObject::InitRootSignature()
 {
 	ID3D12Device5* pD3DDevice = m_pRenderer->INL_GetD3DDevice();
 	ID3DBlob* pSignature = nullptr;
@@ -133,7 +134,7 @@ BOOL CBasicMeshObject::InitRootSignature()
 	return TRUE;
 }
 
-BOOL CBasicMeshObject::InitPipelineState()
+BOOL CSkyboxMeshObject::InitPipelineState()
 {
 	ID3D12Device5* pD3DDevice = m_pRenderer->INL_GetD3DDevice();
 
@@ -149,7 +150,7 @@ BOOL CBasicMeshObject::InitPipelineState()
 #endif
 	m_pRenderer->SetCurrentPathForShader();
 	ID3DBlob* pErrorBlob = nullptr;
-	if (FAILED(D3DCompileFromFile(L"shBasicMesh.hlsl", nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &pVertexShader, &pErrorBlob)))
+	if (FAILED(D3DCompileFromFile(L"shSkybox.hlsl", nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &pVertexShader, &pErrorBlob)))
 	{
 		if (pErrorBlob != nullptr)
 		{
@@ -158,7 +159,7 @@ BOOL CBasicMeshObject::InitPipelineState()
 		}
 		__debugbreak();
 	}
-	if (FAILED(D3DCompileFromFile(L"shBasicMesh.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pPixelShader, &pErrorBlob)))
+	if (FAILED(D3DCompileFromFile(L"shSkybox.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pPixelShader, &pErrorBlob)))
 	{
 		if (pErrorBlob != nullptr)
 		{
@@ -174,9 +175,7 @@ BOOL CBasicMeshObject::InitPipelineState()
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,	0, 28,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 36, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 48, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,	0, 28,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 
 
@@ -216,8 +215,8 @@ BOOL CBasicMeshObject::InitPipelineState()
 	return TRUE;
 }
 
-BOOL __stdcall CBasicMeshObject::BeginCreateMesh(const BasicVertex* pVertexList, 
-										DWORD dwVertexNum, DWORD dwTriGroupCount)
+BOOL __stdcall CSkyboxMeshObject::BeginCreateMesh(const BasicVertex* pVertexList,
+	DWORD dwVertexNum, DWORD dwTriGroupCount)
 {
 	BOOL bResult = FALSE;
 	ID3D12Device5* pD3DDevice = m_pRenderer->INL_GetD3DDevice();
@@ -243,7 +242,7 @@ lb_return:
 	return bResult;
 }
 
-BOOL __stdcall CBasicMeshObject::InsertTriGroup(const WORD* pIndexList, DWORD dwTriCount,
+BOOL __stdcall CSkyboxMeshObject::InsertTriGroup(const WORD* pIndexList, DWORD dwTriCount,
 	const WCHAR* wchTexFileName)
 {
 	BOOL bResult = FALSE;
@@ -273,14 +272,7 @@ BOOL __stdcall CBasicMeshObject::InsertTriGroup(const WORD* pIndexList, DWORD dw
 	pTriGroup->pIndexBuffer = pIndexBuffer;
 	pTriGroup->IndexBufferView = IndexBufferView;
 	pTriGroup->dwTriCount = dwTriCount;
-	if (wchTexFileName == nullptr)
-	{
-		pTriGroup->pTexHandle = (TEXTURE_HANDLE*)m_pRenderer->CreateMagentaTexture(512, 512);
-	}
-	else
-	{
-		pTriGroup->pTexHandle = (TEXTURE_HANDLE*)m_pRenderer->CreateTextureFromFile(wchTexFileName);
-	}
+	pTriGroup->pTexHandle = (TEXTURE_HANDLE*)m_pRenderer->CreateTextureFromFile(wchTexFileName, TRUE); // CubeMap
 	m_dwTriGroupCount++;
 	bResult = TRUE;
 
@@ -288,15 +280,15 @@ lb_return:
 	return bResult;
 }
 
-void __stdcall CBasicMeshObject::EndCreateMesh()
+void __stdcall CSkyboxMeshObject::EndCreateMesh()
 {
 
 }
 
-void CBasicMeshObject::Draw(DWORD dwThreadIndex, ID3D12GraphicsCommandList* pCommandList, const XMMATRIX* pMatWorld)
+void CSkyboxMeshObject::Draw(DWORD dwThreadIndex, ID3D12GraphicsCommandList* pCommandList, const XMMATRIX* pMatWorld)
 {
-	// ê°ê°ì˜ draw()ìž‘ì—…ì˜ ë¬´ê²°ì„±ì„ ë³´ìž¥í•˜ë ¤ë©´ draw() ìž‘ì—…ë§ˆë‹¤ ë‹¤ë¥¸ ì˜ì—­ì˜ descriptor table(shader visible)ê³¼ ë‹¤ë¥¸ ì˜ì—­ì˜ CBVë¥¼ ì‚¬ìš©í•´ì•¼ í•œë‹¤.
-	// ë”°ë¼ì„œ draw()í•  ë•Œë§ˆë‹¤ CBVëŠ” ConstantBuffer Poolë¡œë¶€í„° í• ë‹¹ë°›ê³ , ë Œë”ë§ìš© descriptor table(shader visible)ì€ descriptor poolë¡œë¶€í„° í• ë‹¹ ë°›ëŠ”ë‹¤.
+	// °¢°¢ÀÇ draw()ÀÛ¾÷ÀÇ ¹«°á¼ºÀ» º¸ÀåÇÏ·Á¸é draw() ÀÛ¾÷¸¶´Ù ´Ù¸¥ ¿µ¿ªÀÇ descriptor table(shader visible)°ú ´Ù¸¥ ¿µ¿ªÀÇ CBV¸¦ »ç¿ëÇØ¾ß ÇÑ´Ù.
+	// µû¶ó¼­ draw()ÇÒ ¶§¸¶´Ù CBV´Â ConstantBuffer Pool·ÎºÎÅÍ ÇÒ´ç¹Þ°í, ·»´õ¸µ¿ë descriptor table(shader visible)Àº descriptor pool·ÎºÎÅÍ ÇÒ´ç ¹Þ´Â´Ù.
 
 	ID3D12Device5* pD3DDevice = m_pRenderer->INL_GetD3DDevice();
 	UINT srvDescriptorSize = m_pRenderer->INL_GetSrvDescriptorSize();
@@ -364,7 +356,7 @@ void CBasicMeshObject::Draw(DWORD dwThreadIndex, ID3D12GraphicsCommandList* pCom
 	// Root-parameter 0
 	pCommandList->SetGraphicsRootDescriptorTable(0, gpuDescriptorTable); // per Obj
 
-	CD3DX12_GPU_DESCRIPTOR_HANDLE gpuDescriptorTableForTriGroup(gpuDescriptorTable, 
+	CD3DX12_GPU_DESCRIPTOR_HANDLE gpuDescriptorTableForTriGroup(gpuDescriptorTable,
 		DESCRIPTOR_COUNT_PER_OBJ, srvDescriptorSize);
 	for (DWORD i = 0; i < m_dwTriGroupCount; i++)
 	{
@@ -378,7 +370,7 @@ void CBasicMeshObject::Draw(DWORD dwThreadIndex, ID3D12GraphicsCommandList* pCom
 	}
 }
 
-void CBasicMeshObject::Cleanup()
+void CSkyboxMeshObject::Cleanup()
 {
 	m_pRenderer->EnsureCompleted();
 	// delete all tri-groups
@@ -410,7 +402,7 @@ void CBasicMeshObject::Cleanup()
 	CleanupSharedResources();
 }
 
-void CBasicMeshObject::CleanupSharedResources()
+void CSkyboxMeshObject::CleanupSharedResources()
 {
 	if (!m_dwInitRefCount)
 		return;

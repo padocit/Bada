@@ -27,7 +27,7 @@ BOOL CTextureManager::Initialize(CD3D12Renderer* pRenderer, DWORD dwMaxBucketNum
 	return TRUE;
 }
 
-TEXTURE_HANDLE* CTextureManager::CreateTextureFromFile(const WCHAR* wchFileName)
+TEXTURE_HANDLE* CTextureManager::CreateTextureFromFile(const WCHAR* wchFileName, BOOL bIsCubeMap)
 {
 	ID3D12Device* pD3DDevice = m_pRenderer->INL_GetD3DDevice();
 	CSingleDescriptorAllocator* pSingleDescriptorAllocator = m_pRenderer->INL_GetSingleDescriptorAllocator();
@@ -45,13 +45,25 @@ TEXTURE_HANDLE* CTextureManager::CreateTextureFromFile(const WCHAR* wchFileName)
 	}
 	else
 	{
-		if (m_pResourceManager->CreateTextureFromFile(&pTexResource, &desc, wchFileName))
+		if (m_pResourceManager->CreateTextureFromFile(&pTexResource, &desc, wchFileName, bIsCubeMap))
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC SRVDesc = {};
 			SRVDesc.Format = desc.Format;
-			SRVDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			SRVDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-			SRVDesc.Texture2D.MipLevels = desc.MipLevels;
+			SRVDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;				
+
+			if (bIsCubeMap)
+			{
+				SRVDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+				SRVDesc.TextureCube.MipLevels = desc.MipLevels;
+				SRVDesc.TextureCube.MostDetailedMip = 0;
+				SRVDesc.TextureCube.ResourceMinLODClamp = 0;
+			}
+			else
+			{
+				SRVDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+				SRVDesc.Texture2D.MipLevels = desc.MipLevels;
+			}
+
 
 			if (pSingleDescriptorAllocator->AllocDescriptorHandle(&srv))
 			{

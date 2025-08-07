@@ -305,10 +305,11 @@ BOOL CD3D12ResourceManager::CreateTexture(ID3D12Resource** ppOutResource, UINT W
 	return TRUE;
 }
 
-BOOL CD3D12ResourceManager::CreateTextureFromFile(ID3D12Resource** ppOutResource, D3D12_RESOURCE_DESC* pOutDesc, const WCHAR* wchFileName)
+BOOL CD3D12ResourceManager::CreateTextureFromFile(ID3D12Resource** ppOutResource, D3D12_RESOURCE_DESC* pOutDesc, const WCHAR* wchFileName, bool bIsCubeMap)
 {
 	BOOL bResult = FALSE;
 
+	bool bCubemap = bIsCubeMap;
 	ID3D12Resource* pTexResource = nullptr;
 	ID3D12Resource* pUploadBuffer = nullptr;
 
@@ -316,7 +317,7 @@ BOOL CD3D12ResourceManager::CreateTextureFromFile(ID3D12Resource** ppOutResource
 
 	std::unique_ptr<uint8_t[]> ddsData;
 	std::vector<D3D12_SUBRESOURCE_DATA> subresourceData;
-	if (FAILED(LoadDDSTextureFromFile(m_pD3DDevice, wchFileName, &pTexResource, ddsData, subresourceData)))
+	if (FAILED(LoadDDSTextureFromFile(m_pD3DDevice, wchFileName, &pTexResource, ddsData, subresourceData, 0Ui64, nullptr, &bCubemap)))
 	{
 		goto lb_return;
 	}

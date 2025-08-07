@@ -10,6 +10,9 @@ struct BasicVertex
 	XMFLOAT3 position;
 	XMFLOAT4 color;
 	XMFLOAT2 texCoord;
+	XMFLOAT3 normalModel;	// Normal Vector in Model Space
+	XMFLOAT3 tangentModel;	// Tangent Vector in Model Space
+	// biTangentModel is calculated in shader
 };
 
 union RGBA

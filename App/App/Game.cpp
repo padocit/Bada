@@ -4,8 +4,8 @@
 #include "Typedef.h"
 #include "IRenderer.h"
 #include "LinkedList.h"
-#include "GameObject.h"
 #include "Game.h"
+#include "Skybox.h"
 #include <shlwapi.h>
 
 
@@ -81,30 +81,43 @@ BOOL CGame::Initialize(HWND hWnd, BOOL bEnableDebugLayer, BOOL bEnableGBV)
 
 	m_pSpriteObjCommon = m_pRenderer->CreateSpriteObject();
 
-	const DWORD GAME_OBJ_COUNT = 2000;
-	for (DWORD i = 0; i < GAME_OBJ_COUNT; i++)
+	// create skybox
+	m_pSkybox = new CSkybox;
+	m_pSkybox->Initialize(this);
+
+	CGameObject* pGameObjBox = CreateGameObject(PRIMITIVE_TYPE_BOX);
+	if (pGameObjBox)
 	{
-		CGameObject* pGameObj = CreateGameObject();
-		if (pGameObj)
-		{
-			float x = (float)((rand() % 21) - 10);	// -10m - 10m 
-			float y = 0.0f;
-			float z = (float)((rand() % 21) - 10);	// -10m - 10m 
-			pGameObj->SetPosition(x, y, z);
-			float rad = (rand() % 181) * (3.1415f / 180.0f);
-			pGameObj->SetRotationY(rad);
-		}
+		float x = -1.0f;
+		float y = 0.0f;
+		float z = 1.5f;
+		pGameObjBox->SetPosition(x, y, z);
+		//float rad = 45.0f;
+		//pGameObjBox->SetRotationY(rad);
 	}
-	m_pRenderer->SetCameraPos(0.0f, 0.0f, -10.0f);
+
+	CGameObject* pGameObjSphere = CreateGameObject(PRIMITIVE_TYPE_SPHERE);
+	if (pGameObjSphere)
+	{
+		float x = 1.0f;
+		float y = 0.0f;
+		float z = 1.5f;
+		pGameObjSphere->SetPosition(x, y, z);
+		float rad = 0.0f;
+		pGameObjSphere->SetRotationY(rad);
+	}
+
+	m_pRenderer->SetCameraPos(0.0f, 0.0f, 0.0f);
+
 	return TRUE;
 }
 
-CGameObject* CGame::CreateGameObject()
+CGameObject* CGame::CreateGameObject(PRIMITIVE_TYPE primitiveType)
 {
 	// meshobject를 공용으로 쓰도록 한다.
 	//__debugbreak();
 	CGameObject* pGameObj = new CGameObject;
-	pGameObj->Initialize(this);
+	pGameObj->Initialize(this, primitiveType);
 	LinkToLinkedListFIFO(&m_pGameObjLinkHead, &m_pGameObjLinkTail, &pGameObj->m_LinkInGame);
 
 	return pGameObj;
@@ -118,22 +131,22 @@ void CGame::OnKeyDown(UINT nChar, UINT uiScanCode)
 		m_bShiftKeyDown = TRUE; // TODO:
 		break;
 	case 'W':
-		m_CamOffsetZ = 0.05f;
+		m_CamOffsetZ = 1.0f;
 		break;
 	case 'S':
-		m_CamOffsetZ = -0.05f;
+		m_CamOffsetZ = -1.0f;
 		break;
 	case 'A':
-		m_CamOffsetX = -0.05f;
+		m_CamOffsetX = -1.0f;
 		break;
 	case 'D':
-		m_CamOffsetX = 0.05f;
+		m_CamOffsetX = 1.0f;
 		break;
 	case 'E':
-		m_CamOffsetY = 0.05f;
+		m_CamOffsetY = 1.0f;
 		break;
 	case 'Q':
-		m_CamOffsetY = -0.05f;
+		m_CamOffsetY = -1.0f;
 		break;
 	}
 }
@@ -165,6 +178,73 @@ void CGame::OnKeyUp(UINT nChar, UINT uiScanCode)
 	}
 }
 
+//TODO:
+// Game-Renderer-Camera의 관계
+
+void CGame::OnMouse(WORD mouseX, WORD mouseY)
+{
+	m_MouseX = (int)mouseX;
+	m_MouseY = (int)mouseY;
+}
+
+void CGame::OnMouseMove(WORD mouseX, WORD mouseY)
+{
+	OnMouse(mouseX, mouseY);
+
+    // 이전 위치와 비교하여 델타 계산
+    if (m_bRightMouseDown)
+    {
+		int deltaX = m_MouseX - m_PrevMouseX;
+		int deltaY = m_MouseY - m_PrevMouseY;
+
+		// 카메라 회전
+		if (deltaX != 0 || deltaY != 0)
+		{
+			float rotationX = (float)deltaX * m_fMouseSensitivity;  // Yaw
+			float rotationY = (float)deltaY * m_fMouseSensitivity;  // Pitch
+
+			m_pRenderer->MouseRotateCameraDelta(rotationX, rotationY);
+		}
+	}
+	m_PrevMouseX = m_MouseX;
+	m_PrevMouseY = m_MouseY;
+}
+
+void CGame::OnMouseLeftDown(WORD mouseX, WORD mouseY)
+{
+	OnMouse(mouseX, mouseY);
+	if (!m_bLeftMouseDown)
+	{
+		m_bLeftMouseDown = TRUE;
+	}
+}
+void CGame::OnMouseLeftUp(WORD mouseX, WORD mouseY)
+{
+	if (m_bLeftMouseDown)
+	{
+		m_bLeftMouseDown = FALSE;
+	}
+}
+void CGame::OnMouseRightDown(WORD mouseX, WORD mouseY)
+{
+    OnMouse(mouseX, mouseY);
+    if (!m_bRightMouseDown)
+    {
+        m_bRightMouseDown = TRUE;
+
+		// 첫 번째 위치 설정
+		m_PrevMouseX = m_MouseX;
+		m_PrevMouseY = m_MouseY;
+    }
+}
+void CGame::OnMouseRightUp(WORD mouseX, WORD mouseY)
+{
+	if (m_bRightMouseDown)
+	{
+		m_bRightMouseDown = FALSE;
+	}
+}
+
 void CGame::Run()
 {
 	m_FrameCount++;
@@ -192,20 +272,36 @@ void CGame::Run()
 	}
 }
 BOOL CGame::Update(ULONGLONG CurTick)
-{	
-	// Update Scene with 60FPS
-	if (CurTick - m_PrvUpdateTick < 16)
+{
+	// Update Scene with about 144FPS(6.94ms)
+	if (CurTick - m_PrvUpdateTick < 7)
 	{
 		return FALSE;
 	}
+
+	float deltaTime = (float)(CurTick - m_PrvUpdateTick) / 1000.0f;
 	m_PrvUpdateTick = CurTick;
 
-	// Update camra
-	if (m_CamOffsetX != 0.0f || m_CamOffsetY != 0.0f || m_CamOffsetZ != 0.0f)
-	{
-		m_pRenderer->MoveCamera(m_CamOffsetX, m_CamOffsetY, m_CamOffsetZ);
+	// Update camera
+	if (m_bRightMouseDown)
+	{	
+		// Translate
+		if (m_CamOffsetX != 0.0f || m_CamOffsetY != 0.0f || m_CamOffsetZ != 0.0f)
+		{
+			float moveX = m_CamOffsetX * m_CamMoveSpeed * deltaTime;
+			float moveY = m_CamOffsetY * m_CamMoveSpeed * deltaTime;
+			float moveZ = m_CamOffsetZ * m_CamMoveSpeed * deltaTime;
+
+			m_pRenderer->MoveCamera(moveX, moveY, moveZ);
+		}
 	}
-	
+
+	// update skybox
+	if (m_pSkybox)
+	{
+		m_pSkybox->Run();
+	}
+
 	// update game objects
 	SORT_LINK* pCur = m_pGameObjLinkHead;
 	while (pCur)
@@ -240,6 +336,12 @@ void CGame::Render()
 {
 	m_pRenderer->BeginRender();
 
+	// render skybox
+	if (m_pSkybox)
+	{
+		m_pSkybox->Render();
+	}
+
 	// render game objects
 	SORT_LINK* pCur = m_pGameObjLinkHead;
 	DWORD dwObjCount = 0;
@@ -251,7 +353,7 @@ void CGame::Render()
 		dwObjCount++;
 	}	
 	// render dynamic texture as text
-	m_pRenderer->RenderSpriteWithTex(m_pSpriteObjCommon, 512 + 5, 256 + 5 + 256 + 5, 1.0f, 1.0f, nullptr, 0.0f, m_pTextTexTexHandle);
+	m_pRenderer->RenderSpriteWithTex(m_pSpriteObjCommon, 0, 0, 1.0f, 1.0f, nullptr, 0.0f, m_pTextTexTexHandle);
 
 	// end
 	m_pRenderer->EndRender();
@@ -284,6 +386,12 @@ BOOL CGame::UpdateWindowSize(DWORD dwBackBufferWidth, DWORD dwBackBufferHeight)
 void CGame::Cleanup()
 {
 	DeleteAllGameObjects();
+
+	if (m_pSkybox)
+	{
+		delete m_pSkybox;
+		m_pSkybox = nullptr;
+	}
 
 	if (m_pTextImage)
 	{

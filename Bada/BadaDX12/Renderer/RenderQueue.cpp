@@ -1,6 +1,7 @@
 #include "Pch.h"
 #include "CommandListPool.h"
 #include "BasicMeshObject.h"
+#include "SkyboxMeshObject.h"
 #include "SpriteObject.h"
 #include "D3D12Renderer.h"
 #include "RenderQueue.h"
@@ -82,6 +83,12 @@ DWORD CRenderQueue::Process(DWORD dwThreadIndex,
 			{
 				CBasicMeshObject* pMeshObj = (CBasicMeshObject*)pItem->pObjHandle;
 				pMeshObj->Draw(dwThreadIndex, pCommandList, &pItem->meshObjParam.matWorld);
+			}
+			break;
+		case RENDER_ITEM_TYPE_SKYBOX:
+			{
+				CSkyboxMeshObject* pSkyboxObj = (CSkyboxMeshObject*)pItem->pObjHandle;
+				pSkyboxObj->Draw(dwThreadIndex, pCommandList, &pItem->skyboxParam.matWorld);
 			}
 			break;
 		case RENDER_ITEM_TYPE_SPRITE:

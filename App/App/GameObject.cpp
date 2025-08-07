@@ -19,13 +19,26 @@ CGameObject::CGameObject()
 	m_matTrans = XMMatrixIdentity();
 	m_matWorld = XMMatrixIdentity();
 }
-BOOL CGameObject::Initialize(CGame* pGame)
+BOOL CGameObject::Initialize(CGame* pGame, PRIMITIVE_TYPE primitiveType)
 {
 	BOOL bResult = FALSE;
 	CGame* m_pGame = pGame;
 	m_pRenderer = pGame->INL_GetRenderer();
+	m_PrimitiveType = primitiveType;
 
-	m_pMeshObj = CreateBoxMeshObject();
+	switch (m_PrimitiveType)
+	{
+	case PRIMITIVE_TYPE_BOX:
+		m_pMeshObj = CreateBoxMeshObject();
+		break;
+	case PRIMITIVE_TYPE_SPHERE:
+		m_pMeshObj = CreateSphereMeshObject();
+		break;
+	case PRIMITIVE_TYPE_QUAD:
+		m_pMeshObj = CreateQuadMesh();
+		break;
+	}
+
 	if (m_pMeshObj)
 	{
 		bResult = TRUE;
@@ -127,6 +140,34 @@ IMeshObject* CGameObject::CreateBoxMeshObject()
 	}
 	return pMeshObj;
 }
+
+IMeshObject* CGameObject::CreateSphereMeshObject()
+{
+	IMeshObject* pMeshObj = nullptr;
+
+	WORD* pIndexList = nullptr;
+	BasicVertex* pVertexList = nullptr;
+	DWORD dwVertexCount = CreateSphereMesh(&pVertexList, &pIndexList, 200 * 200 * 6, 0.5f, 200, 200); // numIndices = numSlices * numStacks * 6
+
+	// Use the mesh...
+	pMeshObj = m_pRenderer->CreateBasicMeshObject();
+
+	// Set meshes to the BasicMeshObject
+	pMeshObj->BeginCreateMesh(pVertexList, dwVertexCount, 1);
+	pMeshObj->InsertTriGroup(pIndexList, 200 * 200 * 2, nullptr); // Use default texture(nullptr) // numTri = numSlices * numStacks * 2
+	pMeshObj->EndCreateMesh();
+
+	// delete vertices and indices
+	if (pVertexList || pIndexList)
+	{
+		DeleteSphereMesh(pVertexList, pIndexList);
+		pVertexList = nullptr;
+		pIndexList = nullptr;
+	}
+
+	return pMeshObj;
+}
+
 IMeshObject* CGameObject::CreateQuadMesh()
 {
 	IMeshObject* pMeshObj = m_pRenderer->CreateBasicMeshObject();

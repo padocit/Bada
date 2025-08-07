@@ -13,6 +13,8 @@ struct VSInput
     float4 pos : POSITION;
     float4 color : COLOR;
     float2 texCoord : TEXCOORD0;
+    float3 normal : NORMAL;
+    float3 tangent : TANGENT;
 };
 
 struct PSInput
@@ -20,6 +22,8 @@ struct PSInput
     float4 position : SV_POSITION;
     float4 color : COLOR;
     float2 texCoord : TEXCOORD0;
+    float3 normal : NORMAL;
+    float3 tangent : TANGENT;
 };
 
 PSInput VSMain(VSInput input)
@@ -39,5 +43,5 @@ PSInput VSMain(VSInput input)
 float4 PSMain(PSInput input) : SV_TARGET
 {
     float4 texColor = texDiffuse.Sample(samplerDiffuse, input.texCoord);
-    return texColor * input.color;
+    return texColor;
 }

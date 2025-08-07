@@ -3,6 +3,7 @@
 #include "D3DUtils.h"
 #include "ProcessorInfo.h"
 #include "BasicMeshObject.h"
+#include "SkyboxMeshObject.h"
 #include "SpriteObject.h"
 #include "D3D12ResourceManager.h"
 #include "FontManager.h"
@@ -14,6 +15,7 @@
 #include "RenderQueue.h"
 #include "CommandListPool.h"
 #include "RenderThread.h"
+#include "Camera.h"
 #include "D3D12Renderer.h"
 
 #include <dxgi.h>
@@ -155,17 +157,23 @@ lb_exit:
 	UINT	dwBackBufferWidth = rect.right - rect.left;
 	UINT	dwBackBufferHeight = rect.bottom - rect.top;
 
+	// Check for multisample(MSAA) quality levels.
+	m_pD3DDevice->CheckFeatureSupport(
+		D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,
+		&m_MultiSampleQualityLevels,
+		sizeof(m_MultiSampleQualityLevels));
+
 	// Describe and create the swap chain.
 	{
 		DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
 		swapChainDesc.Width = dwBackBufferWidth;
 		swapChainDesc.Height = dwBackBufferHeight;
-		swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // SwapChain is SDR finally.
 		//swapChainDesc.BufferDesc.RefreshRate.Numerator = m_uiRefreshRate;
 		//swapChainDesc.BufferDesc.RefreshRate.Denominator = 1;
 		swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 		swapChainDesc.BufferCount = SWAP_CHAIN_FRAME_COUNT;
-		swapChainDesc.SampleDesc.Count = 1;
+		swapChainDesc.SampleDesc.Count = 1; // No MSAA
 		swapChainDesc.SampleDesc.Quality = 0;
 		swapChainDesc.Scaling = DXGI_SCALING_NONE;
 		swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -215,6 +223,10 @@ lb_exit:
 		rtvHandle.Offset(1, m_rtvDescriptorSize);
 	}
 	m_srvDescriptorSize = m_pD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	// Create HDR RTV
+	CreateDescriptorHeapForHDR();
+	CreateHDRRenderTargets(m_dwWidth, m_dwHeight);
 
 	// Create Depth-Stencil resources
 	CreateDescriptorHeapForDSV();
@@ -302,59 +314,52 @@ void CD3D12Renderer::RestoreCurrentPath()
 
 void CD3D12Renderer::InitCamera()
 {
-	m_CamPos = XMVectorSet(0.0f, 0.0f, -1.0f, 1.0f);
-	m_CamDir = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-
-	SetCamera(&m_CamPos, &m_CamDir, &up);
+	m_pCamera = new CCamera;
+	m_pCamera->Initialize((float)m_dwWidth / (float)m_dwHeight);
 }
 
-void __stdcall CD3D12Renderer::SetCamera(const XMVECTOR* pCamPos, const XMVECTOR* pCamDir, const XMVECTOR* pCamUp)
-{
-	// View Matrix
-	m_matView = XMMatrixLookToLH(*pCamPos, *pCamDir, *pCamUp);
-
-	// FOV = radians
-	float fovY = XM_PIDIV4; // 90 degrees
-
-	// Proj Matrix
-	float fAspectRatio = (float)m_dwWidth / (float)m_dwHeight;
-	float fNear = 0.1f;
-	float fFar = 1000.0f;
-	m_matProj = XMMatrixPerspectiveFovLH(fovY, fAspectRatio, fNear, fFar);
-}
+//void __stdcall CD3D12Renderer::SetCamera(const XMVECTOR* pCamPos, const XMVECTOR* pCamDir, const XMVECTOR* pCamUp)
+//{
+//	m_pCamera->SetCamera(pCamPos, pCamDir, pCamUp);
+//}
 
 void __stdcall CD3D12Renderer::SetCameraPos(float x, float y, float z)
 {
-	m_CamPos.m128_f32[0] = x;
-	m_CamPos.m128_f32[1] = y;
-	m_CamPos.m128_f32[2] = z;
-	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-
-	SetCamera(&m_CamPos, &m_CamDir, &up);
+	m_pCamera->SetPosition(x, y, z);
 }
 
 void __stdcall CD3D12Renderer::MoveCamera(float x, float y, float z)
 {
-	m_CamPos.m128_f32[0] += x;
-	m_CamPos.m128_f32[1] += y;
-	m_CamPos.m128_f32[2] += z;
-	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-
-	SetCamera(&m_CamPos, &m_CamDir, &up);
+	m_pCamera->MovePosition(x, y, z);
 }
 
 void __stdcall CD3D12Renderer::GetCameraPos(float* pfOutX, float* pfOutY, float* pfOutZ)
 {
-	*pfOutX = m_CamPos.m128_f32[0];
-	*pfOutY = m_CamPos.m128_f32[1];
-	*pfOutZ = m_CamPos.m128_f32[2];
+	m_pCamera->GetPosition(pfOutX, pfOutY, pfOutZ);
+}
+
+void __stdcall CD3D12Renderer::SetCameraRot(float fPitch, float fYaw, float fRoll)
+{
+	m_pCamera->SetRotation(fPitch, fYaw, fRoll);
+}
+void __stdcall CD3D12Renderer::RotateCamera(float fPitch, float fYaw, float fRoll)
+{
+	m_pCamera->RotateEuler(fPitch, fYaw, fRoll);
+}
+void __stdcall CD3D12Renderer::GetCameraRot(float* pfOutPitch, float* pfOutYaw, float* pfOutRoll)
+{
+	m_pCamera->GetRotation(pfOutPitch, pfOutYaw, pfOutRoll);
+}
+
+void __stdcall CD3D12Renderer::MouseRotateCameraDelta(float deltaX, float deltaY)
+{
+	m_pCamera->MouseRotationDelta(deltaX, deltaY);
 }
 
 void CD3D12Renderer::GetViewProjMatrix(XMMATRIX* pOutMatView, XMMATRIX* pOutMatProj)
 {
-	*pOutMatView = XMMatrixTranspose(m_matView);
-	*pOutMatProj = XMMatrixTranspose(m_matProj);
+	m_pCamera->GetViewMatrix(pOutMatView);
+	m_pCamera->GetProjectionMatrix(pOutMatProj);
 }
 
 CSimpleConstantBufferPool* CD3D12Renderer::GetConstantBufferPool(CONSTANT_BUFFER_TYPE type, DWORD dwThreadIndex)
@@ -375,6 +380,112 @@ DWORD __stdcall CD3D12Renderer::GetCommandListCount()
 		}
 	}
 	return dwCommandListCount;
+}
+
+BOOL CD3D12Renderer::CreateHDRRenderTargets(UINT width, UINT height)
+{
+	// MSAA HDR render target 생성
+	D3D12_CLEAR_VALUE hdrClearValue = {};
+	hdrClearValue.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	hdrClearValue.Color[0] = 1.0f;
+	hdrClearValue.Color[1] = 0.0f;
+	hdrClearValue.Color[2] = 0.0f;
+	hdrClearValue.Color[3] = 1.0f;
+
+	CD3DX12_RESOURCE_DESC hdrDesc = CD3DX12_RESOURCE_DESC::Tex2D(
+		DXGI_FORMAT_R16G16B16A16_FLOAT,
+		width, height,
+		1, 1,
+		m_dwMSAASampleCount, m_dwMSAAQuality,
+		D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET
+	);
+
+	// MSAA HDR 렌더 타겟
+	CD3DX12_CPU_DESCRIPTOR_HANDLE hdrRTVHandle(m_pHDRRTVHeap->GetCPUDescriptorHandleForHeapStart());
+	// Descriptor Table
+	// |        0        |        1	       | ...
+	// | Render Target 0 | Render Target 1 | ...
+	for (UINT n = 0; n < SWAP_CHAIN_FRAME_COUNT; n++)
+	{
+		if (FAILED(m_pD3DDevice->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+			D3D12_HEAP_FLAG_NONE,
+			&hdrDesc,
+			D3D12_RESOURCE_STATE_RENDER_TARGET,
+			&hdrClearValue,
+			IID_PPV_ARGS(&m_pHDRRenderTarget[n])
+		)))
+		{
+			__debugbreak();
+		}
+
+		// RTV 생성
+		D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		rtvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		
+		if (m_dwMSAASampleCount > 1)
+		{
+			rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+		}
+		else
+		{
+			rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+			//rtvDesc.Texture2D.MipSlice = 0;
+		}
+
+		m_pD3DDevice->CreateRenderTargetView(
+			m_pHDRRenderTarget[n], 
+			&rtvDesc, 
+			hdrRTVHandle
+		);
+
+		hdrRTVHandle.Offset(1, m_hdrRTVDescriptorSize);
+	}
+
+	// Non-MSAA resolved target
+	hdrDesc.SampleDesc.Count = 1;
+	hdrDesc.SampleDesc.Quality = 0;
+	hdrDesc.Flags = D3D12_RESOURCE_FLAG_NONE; // RTV 플래그 제거
+
+	// HDR Resolved 타겟과 SRV 생성
+	CD3DX12_CPU_DESCRIPTOR_HANDLE hdrSRVHandle(m_pHDRResolvedSRVHeap->GetCPUDescriptorHandleForHeapStart());
+	// Descriptor Table
+	// |        0        |        1	       | ...
+	// | SRV Target 0    | SRV Target 1    | ...
+	for (UINT n = 0; n < SWAP_CHAIN_FRAME_COUNT; n++)
+	{
+		if (FAILED(m_pD3DDevice->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+			D3D12_HEAP_FLAG_NONE,
+			&hdrDesc,
+			D3D12_RESOURCE_STATE_COPY_DEST, // 복사 대상 상태
+			nullptr, // Clear value 불필요
+			IID_PPV_ARGS(&m_pHDRResolvedTarget[n])
+		)))
+		{
+			__debugbreak();
+		}
+
+		// SRV 생성 (톤매핑 등에서 사용)
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = 1;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.PlaneSlice = 0;
+		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+		m_pD3DDevice->CreateShaderResourceView(
+			m_pHDRResolvedTarget[n],
+			&srvDesc,
+			hdrSRVHandle
+		);
+
+		hdrSRVHandle.Offset(1, m_hdrSRVDescriptorSize);
+	}
+
+	return TRUE;
 }
 
 BOOL CD3D12Renderer::CreateDepthStencil(UINT width, UINT height)
@@ -497,6 +608,9 @@ void __stdcall CD3D12Renderer::BeginRender()
 	// 화면 클리어 및 이번 프레임 렌더링을 위한 자료구조 초기화
 	//
 
+	// Camera
+	m_pCamera->UpdateMatrices();
+
 	CCommandListPool* pCommandListPool = m_ppCommandListPool[m_dwCurContextIndex][0];
 	ID3D12GraphicsCommandList* pCommandList = pCommandListPool->GetCurrentCommandList();
 
@@ -521,6 +635,20 @@ void __stdcall CD3D12Renderer::RenderMeshObject(IMeshObject* pMeshObj, const XMM
 {
 	RENDER_ITEM item;
 	item.type = RENDER_ITEM_TYPE_MESH_OBJ;
+	item.pObjHandle = pMeshObj;
+	item.meshObjParam.matWorld = *pMatWorld;
+
+	if (!m_ppRenderQueue[m_dwCurThreadIndex]->Add(&item))
+		__debugbreak();
+
+	m_dwCurThreadIndex++;
+	m_dwCurThreadIndex = m_dwCurThreadIndex % m_dwRenderThreadCount;
+}
+
+void __stdcall CD3D12Renderer::RenderSkybox(IMeshObject* pMeshObj, const XMMATRIX* pMatWorld)
+{
+	RENDER_ITEM item;
+	item.type = RENDER_ITEM_TYPE_SKYBOX;
 	item.pObjHandle = pMeshObj;
 	item.meshObjParam.matWorld = *pMatWorld;
 
@@ -709,6 +837,13 @@ IMeshObject* __stdcall CD3D12Renderer::CreateBasicMeshObject()
 	return pMeshObj;
 }
 
+IMeshObject* __stdcall CD3D12Renderer::CreateSkyboxMeshObject()
+{
+	CSkyboxMeshObject* pMeshObj = new CSkyboxMeshObject;
+	pMeshObj->Initialize(this);
+	return pMeshObj;
+}
+
 ISprite* __stdcall CD3D12Renderer::CreateSpriteObject()
 {
 	CSpriteObject* pSprObj = new CSpriteObject;
@@ -748,6 +883,35 @@ void CD3D12Renderer::WaitForFenceValue(UINT64 ExpectedFenceValue)
 		m_pFence->SetEventOnCompletion(ExpectedFenceValue, m_hFenceEvent); // Event Set -> Event Signal(처리완료 시)
 		WaitForSingleObject(m_hFenceEvent, INFINITE); // 메인스레드 blocking
 	}
+}
+
+void* __stdcall CD3D12Renderer::CreateMagentaTexture(UINT texWidth, UINT texHeight)
+{
+	DXGI_FORMAT texFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+	// Create a default texture (Magenta)
+	BYTE* pImage = (BYTE*)malloc(texWidth * texHeight * 4);
+	memset(pImage, 0, texWidth * texHeight * 4);
+
+	for (UINT y = 0; y < texHeight; y++)
+	{
+		for (UINT x = 0; x < texWidth; x++)
+		{
+
+			RGBA* pDest = (RGBA*)(pImage + (x + y * texWidth) * 4);
+
+			pDest->r = 255;
+			pDest->g = 0;
+			pDest->b = 255;
+			pDest->a = 255;
+		}
+	}
+
+	TEXTURE_HANDLE* pTexHandle = 
+		m_pTextureManager->CreateImmutableTexture(texWidth, texHeight, texFormat, pImage);
+	free(pImage);
+	pImage = nullptr;
+	return pTexHandle;
 }
 
 void* __stdcall CD3D12Renderer::CreateTiledTexture(UINT texWidth, UINT texHeight, DWORD r, DWORD g, DWORD b)
@@ -799,9 +963,9 @@ void* __stdcall CD3D12Renderer::CreateDynamicTexture(UINT texWidth, UINT texHeig
 	return pTexHandle;
 }
 
-void* __stdcall CD3D12Renderer::CreateTextureFromFile(const WCHAR* wchFileName)
+void* __stdcall CD3D12Renderer::CreateTextureFromFile(const WCHAR* wchFileName, BOOL bIsCubeMap)
 {
-	TEXTURE_HANDLE* pTexHandle = m_pTextureManager->CreateTextureFromFile(wchFileName);
+	TEXTURE_HANDLE* pTexHandle = m_pTextureManager->CreateTextureFromFile(wchFileName, bIsCubeMap);
 #ifdef _DEBUG
 	if (!pTexHandle)
 		__debugbreak();
@@ -871,11 +1035,9 @@ void CD3D12Renderer::CleanupFence()
 
 BOOL CD3D12Renderer::CreateDescriptorHeapForRTV()
 {
-	HRESULT hr = S_OK;
-
-	// 렌더타겟용 디스크립터힙 (2칸 <- Double buffer)
+	// 렌더타겟용 디스크립터힙 (3칸)
 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-	rtvHeapDesc.NumDescriptors = SWAP_CHAIN_FRAME_COUNT;	// SwapChain Buffer 0	| SwapChain Buffer 1
+	rtvHeapDesc.NumDescriptors = SWAP_CHAIN_FRAME_COUNT;	// SwapChain Buffer 0	|	SwapChain Buffer 1	|	SwapChain Buffer 2
 	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 	if (FAILED(m_pD3DDevice->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_pRTVHeap))))
@@ -885,6 +1047,39 @@ BOOL CD3D12Renderer::CreateDescriptorHeapForRTV()
 
 	// GPU마다 사이즈 다름
 	m_rtvDescriptorSize = m_pD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+	return TRUE;
+}
+
+BOOL CD3D12Renderer::CreateDescriptorHeapForHDR()
+{
+	// HDR RTV 디스크립터힙 (3칸)
+	D3D12_DESCRIPTOR_HEAP_DESC hdrHeapDesc = {};
+	hdrHeapDesc.NumDescriptors = SWAP_CHAIN_FRAME_COUNT;	// Buffer 0	|	Buffer 1	|	Buffer 2
+	hdrHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+	hdrHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	if (FAILED(m_pD3DDevice->CreateDescriptorHeap(&hdrHeapDesc, IID_PPV_ARGS(&m_pHDRRTVHeap))))
+	{
+		__debugbreak();
+	}
+	// HDR Resolved 디스크립터힙 (3칸)
+	if (FAILED(m_pD3DDevice->CreateDescriptorHeap(&hdrHeapDesc, IID_PPV_ARGS(&m_pHDRResolvedHeap))))
+	{
+		__debugbreak();
+	}
+	// GPU마다 사이즈 다름
+	m_hdrRTVDescriptorSize = m_pD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+	// HDR SRV 디스크립터힙 (3칸)
+	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
+	srvHeapDesc.NumDescriptors = SWAP_CHAIN_FRAME_COUNT;	// Buffer 0	|	Buffer 1	|	Buffer 2
+	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	if (FAILED(m_pD3DDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&m_pHDRResolvedSRVHeap))))
+	{
+		__debugbreak();
+	}
+	m_hdrSRVDescriptorSize = m_pD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 	return TRUE;
 }
@@ -912,6 +1107,25 @@ void CD3D12Renderer::CleanupDescriptorHeapForRTV()
 	{
 		m_pRTVHeap->Release();
 		m_pRTVHeap = nullptr;
+	}
+}
+
+void CD3D12Renderer::CleanupDescriptorHeapForHDR()
+{
+	if (m_pHDRRTVHeap)
+	{
+		m_pHDRRTVHeap->Release();
+		m_pHDRRTVHeap = nullptr;
+	}
+	if (m_pHDRResolvedHeap)
+	{
+		m_pHDRResolvedHeap->Release();
+		m_pHDRResolvedHeap = nullptr;
+	}
+	if (m_pHDRResolvedSRVHeap)
+	{
+		m_pHDRResolvedSRVHeap->Release();
+		m_pHDRResolvedSRVHeap = nullptr;
 	}
 }
 
@@ -974,6 +1188,11 @@ void CD3D12Renderer::Cleanup()
 			}
 		}
 	}
+	if (m_pCamera)
+	{
+		delete m_pCamera;
+		m_pCamera = nullptr;
+	}
 	if (m_pTextureManager)
 	{
 		delete m_pTextureManager;
@@ -996,6 +1215,7 @@ void CD3D12Renderer::Cleanup()
 	}
 
 	CleanupDescriptorHeapForRTV();
+	CleanupDescriptorHeapForHDR();
 	CleanupDescriptorHeapForDSV();
 
 	for (DWORD i = 0; i < SWAP_CHAIN_FRAME_COUNT; i++)
@@ -1004,6 +1224,16 @@ void CD3D12Renderer::Cleanup()
 		{
 			m_pRenderTargets[i]->Release(); // Release 호출 시 리턴 값 = 'rax 레지스터' (rax == 0, 객체 완전 파괴)
 			m_pRenderTargets[i] = nullptr;
+		}
+		if (m_pHDRRenderTarget[i])
+		{
+			m_pHDRRenderTarget[i]->Release();
+			m_pHDRRenderTarget[i] = nullptr;
+		}
+		if (m_pHDRResolvedTarget[i])
+		{
+			m_pHDRResolvedTarget[i]->Release();
+			m_pHDRResolvedTarget[i] = nullptr;
 		}
 	}
 	if (m_pDepthStencil)

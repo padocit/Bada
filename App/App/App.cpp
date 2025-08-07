@@ -207,7 +207,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				EndPaint(hWnd, &ps);
 			}
 			break;
-			case WM_SIZE:
+		case WM_SIZE:
 			{
 				if (g_pGame)
 				{
@@ -219,6 +219,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				}
 			}
 			break;
+
 		case WM_KEYDOWN:
 			{
 				if (g_pGame)
@@ -233,7 +234,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				}
 			}
 			break;
-
 		case WM_KEYUP:
 			{
 				if (g_pGame)
@@ -244,6 +244,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				}
 			}
 			break;
+
+		//TODO:
+		case WM_MOUSEMOVE:
+			g_pGame->OnMouseMove(LOWORD(lParam), HIWORD(lParam));
+			break;
+		case WM_LBUTTONDOWN:
+			g_pGame->OnMouseLeftDown(LOWORD(lParam), HIWORD(lParam));
+			break;
+		case WM_LBUTTONUP:
+			g_pGame->OnMouseLeftUp(LOWORD(lParam), HIWORD(lParam));
+			break;
+		case WM_RBUTTONDOWN:
+			g_pGame->OnMouseRightDown(LOWORD(lParam), HIWORD(lParam));
+			break;
+		case WM_RBUTTONUP:
+			g_pGame->OnMouseRightUp(LOWORD(lParam), HIWORD(lParam));
+			break;
+
 		case WM_DESTROY:
 			PostQuitMessage(0);
 			break;
